@@ -95,7 +95,8 @@ const WifiNet wifiNets[] = WIFI_NETWORKS;
 bool selectWifi()
 {
 #ifdef WIFI_NETWORKS
-  WiFi.mode(WIFI_STA);
+  // add STA without dropping the HTTPD soft AP if it is running
+  WiFi.mode((wifi_mode_t)(WiFi.getMode() | WIFI_MODE_STA));
   int n = WiFi.scanNetworks();
   // scan can fail while a join is in progress; keep the current choice
   if (n < 0) return curSSID[0] != 0;
