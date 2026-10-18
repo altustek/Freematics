@@ -828,7 +828,13 @@ void process()
 #endif
   do {
     long t = dataInterval - (millis() - startTime);
+#if ENABLE_HTTPD
+    // service HTTP clients while waiting for the next sample
+    serverProcess(t > 50 ? 50 : (t > 0 ? t : 0));
+    processBLE(0);
+#else
     processBLE(t > 0 ? t : 0);
+#endif
   } while (millis() - startTime < dataInterval);
 }
 
