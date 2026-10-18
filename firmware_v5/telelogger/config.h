@@ -127,9 +127,13 @@
 #define WIFI_MESH_ID "123456"
 #define WIFI_MESH_CHANNEL 13
 
-// WiFi AP settings
+// WiFi AP settings (override in wifi_secrets.h)
+#ifndef WIFI_AP_SSID
 #define WIFI_AP_SSID "TELELOGGER"
+#endif
+#ifndef WIFI_AP_PASSWORD
 #define WIFI_AP_PASSWORD "PASSWORD"
+#endif
 
 // maximum consecutive communication errors before resetting network
 #define MAX_CONN_ERRORS_RECONNECT 5
