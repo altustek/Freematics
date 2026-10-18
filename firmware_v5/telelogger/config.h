@@ -86,9 +86,10 @@
 
 #ifndef SERVER_HOST
 // cellular network settings
-#define CELL_APN ""
-// Freematics Hub server settings
+#define CELL_APN "hologram"
+// Traccar server (Freematics protocol, UDP)
 #define SERVER_HOST "hub.freematics.com"
+#define SERVER_PORT 5170
 #define SERVER_PROTOCOL PROTOCOL_UDP
 #endif
 
@@ -108,6 +109,19 @@
 #define SERVER_PORT 443
 #endif
 #endif
+
+// Known WiFi networks {ssid, password, metric}: the visible network with the
+// lowest metric wins, ties broken by signal strength. Falls back to
+// WIFI_SSID / NVS settings when none of these is in range.
+// Define WIFI_NETWORKS in wifi_secrets.h (not committed), e.g.
+// #define WIFI_NETWORKS { {"HomeSSID", "password", 10}, {"Hotspot", "password", 20}, }
+#if __has_include("wifi_secrets.h")
+#include "wifi_secrets.h"
+#endif
+// WiFi transmit power (library default is WIFI_POWER_8_5dBm)
+#define WIFI_TX_POWER WIFI_POWER_19_5dBm
+// ignore networks weaker than this (dBm)
+#define WIFI_MIN_RSSI -85
 
 // WiFi Mesh settings
 #define WIFI_MESH_ID "123456"

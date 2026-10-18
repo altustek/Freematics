@@ -78,8 +78,55 @@ char apn[32];
 #if ENABLE_WIFI
 char wifiSSID[32] = WIFI_SSID;
 char wifiPassword[32] = WIFI_PASSWORD;
+// network actually being joined, chosen by selectWifi()
+char curSSID[33] = {0};
+char curPassword[64] = {0};
 #endif
 nvs_handle_t nvs;
+
+#if ENABLE_WIFI
+#ifdef WIFI_NETWORKS
+struct WifiNet { const char* ssid; const char* pwd; int metric; };
+const WifiNet wifiNets[] = WIFI_NETWORKS;
+#endif
+
+// pick the network to join: best known network in range, else the single
+// configured one (config.h / NVS); returns false if there is nothing to join
+bool selectWifi()
+{
+#ifdef WIFI_NETWORKS
+  WiFi.mode(WIFI_STA);
+  int n = WiFi.scanNetworks();
+  // scan can fail while a join is in progress; keep the current choice
+  if (n < 0) return curSSID[0] != 0;
+  int best = -1, bestRssi = -127;
+  for (int i = 0; i < n; i++) {
+    int rssi = WiFi.RSSI(i);
+    if (rssi < WIFI_MIN_RSSI) continue;
+    for (int j = 0; j < sizeof(wifiNets) / sizeof(wifiNets[0]); j++) {
+      if (WiFi.SSID(i) != wifiNets[j].ssid) continue;
+      if (best < 0 || wifiNets[j].metric < wifiNets[best].metric ||
+          (wifiNets[j].metric == wifiNets[best].metric && rssi > bestRssi)) {
+        best = j;
+        bestRssi = rssi;
+      }
+    }
+  }
+  WiFi.scanDelete();
+  if (best >= 0) {
+    strncpy(curSSID, wifiNets[best].ssid, sizeof(curSSID) - 1);
+    strncpy(curPassword, wifiNets[best].pwd, sizeof(curPassword) - 1);
+    Serial.printf("[WIFI] Selected %s (metric %d, %ddBm)\n", curSSID, wifiNets[best].metric, bestRssi);
+    return true;
+  }
+  Serial.printf("[WIFI] No known network in range (%d seen)\n", n);
+#endif
+  strncpy(curSSID, wifiSSID, sizeof(curSSID) - 1);
+  strncpy(curPassword, wifiPassword, sizeof(curPassword) - 1);
+  return curSSID[0] != 0;
+}
+
+#endif
 
 // live data
 String netop;
@@ -153,6 +200,16 @@ SDLogger logger;
 TeleClientUDP teleClient;
 #else
 TeleClientHTTP teleClient;
+#endif
+
+#if ENABLE_WIFI
+void joinWifi()
+{
+  teleClient.wifi.begin(curSSID, curPassword);
+#ifdef WIFI_TX_POWER
+  WiFi.setTxPower(WIFI_TX_POWER);
+#endif
+}
 #endif
 
 #if ENABLE_OLED
@@ -886,10 +943,10 @@ void telemetry(void* inst)
       if (state.check(STATE_STANDBY)) {
         // start ping
 #if ENABLE_WIFI
-        if (wifiSSID[0]) { 
+        if (selectWifi()) {
           Serial.print("[WIFI] Joining SSID:");
-          Serial.println(wifiSSID);
-          teleClient.wifi.begin(wifiSSID, wifiPassword);
+          Serial.println(curSSID);
+          joinWifi();
         }
         if (teleClient.wifi.setup()) {
           Serial.println("[WIFI] Ping...");
@@ -910,17 +967,17 @@ void telemetry(void* inst)
     }
 
 #if ENABLE_WIFI
-    if (wifiSSID[0] && !state.check(STATE_WIFI_CONNECTED)) {
+    if (!state.check(STATE_WIFI_CONNECTED) && selectWifi()) {
       Serial.print("[WIFI] Joining SSID:");
-      Serial.println(wifiSSID);
-      teleClient.wifi.begin(wifiSSID, wifiPassword);
+      Serial.println(curSSID);
+      joinWifi();
       teleClient.wifi.setup();
     }
 #endif
 
     while (state.check(STATE_WORKING)) {
 #if ENABLE_WIFI
-      if (wifiSSID[0]) {
+      if (curSSID[0]) {
         if (!state.check(STATE_WIFI_CONNECTED) && teleClient.wifi.connected()) {
           ip = teleClient.wifi.getIP();
           if (ip.length()) {
@@ -978,8 +1035,8 @@ void telemetry(void* inst)
         lastRssiTime = millis();
 
 #if ENABLE_WIFI
-        if (wifiSSID[0] && !state.check(STATE_WIFI_CONNECTED)) {
-          teleClient.wifi.begin(wifiSSID, wifiPassword);
+        if (!state.check(STATE_WIFI_CONNECTED) && selectWifi()) {
+          joinWifi();
         }
 #endif
       }
