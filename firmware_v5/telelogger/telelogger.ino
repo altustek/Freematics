@@ -26,6 +26,10 @@
 #include "driver/adc.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#if ENABLE_BLE
+#include "esp_bt.h"
+#include "esp_bt_main.h"
+#endif
 #if ENABLE_OLED
 #include "FreematicsOLED.h"
 #endif
@@ -137,6 +141,8 @@ int16_t rssiLast = 0;
 char vin[18] = {0};
 uint16_t dtc[6] = {0};
 float batteryVoltage = 0;
+// set in standby when the vehicle battery runs low; shared with telemetry task
+volatile bool lowBattery = false;
 GPS_DATA* gd = 0;
 
 char devid[12] = {0};
@@ -947,6 +953,10 @@ void telemetry(void* inst)
       do {
         delay(1000);
       } while (state.check(STATE_STANDBY) && millis() - t < 1000L * PING_BACK_INTERVAL);
+      if (state.check(STATE_STANDBY) && lowBattery) {
+        Serial.println("[NET] Low battery, ping skipped");
+        continue;
+      }
       if (state.check(STATE_STANDBY)) {
         // start ping
 #if ENABLE_WIFI
@@ -968,6 +978,10 @@ void telemetry(void* inst)
           }
         }
         teleClient.shutdown();
+#if ENABLE_WIFI && RESET_AFTER_WAKEUP
+        // radio back off until the next ping (see radiosOff)
+        WiFi.mode(WIFI_OFF);
+#endif
         state.clear(STATE_CELL_CONNECTED | STATE_WIFI_CONNECTED);
       }
       continue;
@@ -1132,6 +1146,37 @@ void telemetry(void* inst)
 /*******************************************************************************
   Implementing stand-by mode
 *******************************************************************************/
+// switch off WiFi (client + soft AP) and BLE for standby; they come back
+// when the device restarts on wakeup (RESET_AFTER_WAKEUP)
+void radiosOff()
+{
+#if ENABLE_WIFI || ENABLE_HTTPD
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_OFF);
+  Serial.println("[WIFI] OFF");
+#endif
+#if ENABLE_BLE
+  esp_bluedroid_disable();
+  esp_bt_controller_disable();
+  Serial.println("[BLE] OFF");
+#endif
+}
+
+// read vehicle battery voltage and update the low battery flag
+void checkBattery()
+{
+  float v = obd.getVoltage();
+  if (v < MIN_VEHICLE_VOLTAGE) return; // no reading or bench/USB power
+  batteryVoltage = v;
+  if (!lowBattery && v < LOW_BATTERY_VOLTAGE) {
+    lowBattery = true;
+    Serial.printf("[BATT] Low %.1fV, standby pings disabled\n", v);
+  } else if (lowBattery && v >= CHARGING_VOLTAGE) {
+    lowBattery = false;
+    Serial.printf("[BATT] Charging %.1fV\n", v);
+  }
+}
+
 void standby()
 {
   state.set(STATE_STANDBY);
@@ -1159,12 +1204,25 @@ void standby()
 #endif
   Serial.println("STANDBY");
   obd.enterLowPowerMode();
+#if RESET_AFTER_WAKEUP
+  radiosOff();
+#endif
 #if ENABLE_MEMS
   calibrateMEMS();
-  waitMotion(-1);
+  for (;;) {
+    bool moved = waitMotion(BATTERY_CHECK_INTERVAL * 1000L);
+    if (!state.check(STATE_STANDBY)) break; // woken by command
+    bool wasLow = lowBattery;
+    checkBattery();
+    if (wasLow && !lowBattery) break; // engine started, battery charging
+    // with a low battery only a running engine may wake the device
+    if (lowBattery) continue;
+    if (moved) break;
+  }
 #elif ENABLE_OBD
   do {
     delay(5000);
+    checkBattery();
   } while (obd.getVoltage() < JUMPSTART_VOLTAGE);
 #else
   delay(5000);

@@ -186,6 +186,16 @@
 // reset device after waking up
 #define RESET_AFTER_WAKEUP 1
 
+// battery protection while parked (standby)
+// below this the standby pings stop and motion alone no longer wakes the device
+#define LOW_BATTERY_VOLTAGE 12.0f /* V */
+// above this the alternator is charging (engine running): clears low battery
+#define CHARGING_VOLTAGE 13.2f /* V */
+// readings below this mean bench/USB power, not a vehicle battery: ignored
+#define MIN_VEHICLE_VOLTAGE 9.0f /* V */
+// how often to check the battery in standby
+#define BATTERY_CHECK_INTERVAL 60 /* seconds */
+
 /**************************************
 * Additional features
 **************************************/
