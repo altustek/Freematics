@@ -1162,6 +1162,17 @@ void radiosOff()
 #endif
 }
 
+// switch radios off once the standby grace period is over (or battery is low)
+void standbyRadios(uint32_t standbyStart, bool& radiosOn)
+{
+#if RESET_AFTER_WAKEUP
+  if (radiosOn && (lowBattery || millis() - standbyStart >= STANDBY_RADIO_OFF_DELAY * 1000UL)) {
+    radiosOff();
+    radiosOn = false;
+  }
+#endif
+}
+
 // read vehicle battery voltage and update the low battery flag
 void checkBattery()
 {
@@ -1204,9 +1215,8 @@ void standby()
 #endif
   Serial.println("STANDBY");
   obd.enterLowPowerMode();
-#if RESET_AFTER_WAKEUP
-  radiosOff();
-#endif
+  uint32_t standbyStart = millis();
+  bool radiosOn = true;
 #if ENABLE_MEMS
   calibrateMEMS();
   for (;;) {
@@ -1215,6 +1225,7 @@ void standby()
     bool wasLow = lowBattery;
     checkBattery();
     if (wasLow && !lowBattery) break; // engine started, battery charging
+    standbyRadios(standbyStart, radiosOn);
     // with a low battery only a running engine may wake the device
     if (lowBattery) continue;
     if (moved) break;
@@ -1223,6 +1234,7 @@ void standby()
   do {
     delay(5000);
     checkBattery();
+    standbyRadios(standbyStart, radiosOn);
   } while (obd.getVoltage() < JUMPSTART_VOLTAGE);
 #else
   delay(5000);

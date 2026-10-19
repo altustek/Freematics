@@ -195,6 +195,8 @@
 #define MIN_VEHICLE_VOLTAGE 9.0f /* V */
 // how often to check the battery in standby
 #define BATTERY_CHECK_INTERVAL 60 /* seconds */
+// keep soft AP and BLE up this long after entering standby (low battery: off at once)
+#define STANDBY_RADIO_OFF_DELAY 600 /* seconds */
 
 /**************************************
 * Additional features
