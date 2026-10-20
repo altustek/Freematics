@@ -124,6 +124,7 @@ public:
     char IMEI[16] = {0};
 protected:
     bool sendCommand(const char* cmd, unsigned int timeout = 1000, const char* expected = 0);
+    bool checkRegistration(const char* cmd, const char* tag);
     virtual void inbound();
     virtual void checkGPS();
     float parseDegree(const char* s);
