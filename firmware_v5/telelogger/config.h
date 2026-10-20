@@ -87,8 +87,8 @@
 // Local overrides (not committed): server host/port, APN, WiFi credentials.
 // e.g. #define SERVER_HOST "traccar.example.com"
 //      #define SERVER_PORT 5170
-#if __has_include("wifi_secrets.h")
-#include "wifi_secrets.h"
+#if __has_include("secrets.h")
+#include "secrets.h"
 #endif
 
 // cellular network settings
@@ -123,7 +123,7 @@
 // Known WiFi networks {ssid, password, metric}: the visible network with the
 // lowest metric wins, ties broken by signal strength. Falls back to
 // WIFI_SSID / NVS settings when none of these is in range.
-// Define WIFI_NETWORKS in wifi_secrets.h (not committed), e.g.
+// Define WIFI_NETWORKS in secrets.h (not committed), e.g.
 // #define WIFI_NETWORKS { {"HomeSSID", "password", 10}, {"Hotspot", "password", 20}, }
 // WiFi transmit power (library default is WIFI_POWER_8_5dBm)
 #define WIFI_TX_POWER WIFI_POWER_19_5dBm
@@ -134,7 +134,7 @@
 #define WIFI_MESH_ID "123456"
 #define WIFI_MESH_CHANNEL 13
 
-// WiFi AP settings (override in wifi_secrets.h)
+// WiFi AP settings (override in secrets.h)
 #ifndef WIFI_AP_SSID
 #define WIFI_AP_SSID "TELELOGGER"
 #endif
