@@ -789,6 +789,8 @@ void process()
   static uint32_t ecuOffTime = 0;
   // process OBD data if connected
   if (state.check(STATE_OBD_READY)) {
+    // also when OBD came back through a full init (initialize())
+    ecuOffTime = 0;
     processOBD(buffer);
     if (obd.errors >= MAX_OBD_ERRORS) {
       if (!obd.init()) {
