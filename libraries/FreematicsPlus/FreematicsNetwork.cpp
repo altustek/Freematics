@@ -207,6 +207,41 @@ char* WifiHTTP::receive(char* buffer, int bufsize, int* pbytes, unsigned int tim
 /*******************************************************************************
   SIM7600/SIM7070/SIM5360
 *******************************************************************************/
+// Return <stat> from a "+CREG: <n>,<stat>[,...]" style query reply (same
+// layout for +CGREG and +CEREG), or -1 if there is none. Works for any <n>,
+// and skips unsolicited "+CREG: <stat>[,<lac>,...]" lines mixed into the buffer.
+static int parseRegStatus(const char* buf, const char* tag)
+{
+  size_t len = strlen(tag);
+  for (const char* p = strstr(buf, tag); p; p = strstr(p + len, tag)) {
+    const char* s = p + len;
+    while (*s == ' ') s++;
+    if (!isdigit((unsigned char)*s)) continue;
+    while (isdigit((unsigned char)*s)) s++;
+    if (*s++ != ',' || !isdigit((unsigned char)*s)) continue;
+    return atoi(s);
+  }
+  return -1;
+}
+
+// 1 = home, 5 = roaming (roaming IoT SIMs such as Hologram usually report 5);
+// 6/7 = SMS only and 9/10 = CSFB not preferred are LTE registrations that
+// still carry data (3GPP TS 27.007). Status values are multi-digit, so they
+// must be parsed as numbers, not as a single character.
+static bool isRegistered(int stat)
+{
+  return stat == 1 || stat == 5 || stat == 6 || stat == 7 || stat == 9 || stat == 10;
+}
+
+bool CellSIMCOM::checkRegistration(const char* cmd, const char* tag)
+{
+  // wait for the final OK rather than the "+CREG: 0," prefix: returning on the
+  // prefix can miss the status digits and leaves the rest of the reply in the
+  // UART for the next command to read
+  if (!sendCommand(cmd, 1000)) return false;
+  return isRegistered(parseRegStatus(m_buffer, tag));
+}
+
 bool CellSIMCOM::begin(CFreematics* device)
 {
   getBuffer();
@@ -285,13 +320,7 @@ bool CellSIMCOM::setup(const char* apn, const char* username, const char* passwo
         sendCommand("AT+CFUN=1\r");
         do {
           delay(500);
-          if (sendCommand("AT+CGREG?\r",1000, "+CGREG: 0,")) {
-            char *p = strstr(m_buffer, "+CGREG: 0,");
-            if (p) {
-              char ret = *(p + 10);
-              success = ret == '1' || ret == '5';
-            }
-          }
+          success = checkRegistration("AT+CGREG?\r", "+CGREG:");
         } while (!success && millis() - t < timeout);
         if (!success) break;
         success = sendCommand("AT+CGACT?\r", 1000, "+CGACT: 1,");
@@ -331,10 +360,10 @@ bool CellSIMCOM::setup(const char* apn, const char* username, const char* passwo
       success = false;
       do {
         delay(100);
-        if (sendCommand("AT+CREG?\r", 1000, "+CREG: 0,")) {
-          char *p = strstr(m_buffer, "+CREG: 0,");
-          success = (p && (*(p + 9) == '1' || *(p + 9) == '5') || *(p + 9) == '6');
-        }
+        // circuit-switched registration first; LTE data-only networks (common
+        // for roaming IoT SIMs) may only report EPS registration
+        success = checkRegistration("AT+CREG?\r", "+CREG:") ||
+          (m_type != CELL_SIM5360 && checkRegistration("AT+CEREG?\r", "+CEREG:"));
       } while (!success && millis() - t < timeout);
       if (!success) break;
       
