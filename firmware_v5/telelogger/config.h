@@ -267,6 +267,13 @@
 /**************************************
 * Additional features
 **************************************/
+// seconds to wait at boot for a key on USB serial that opens a pipe to the
+// OBD co-processor or the modem, for typing AT commands (0: off). Adds the
+// wait to every boot, so only for bench debugging.
+#ifndef BOOT_AT_PIPE_TIMEOUT
+#define BOOT_AT_PIPE_TIMEOUT 0
+#endif
+
 #define PIN_SENSOR1 34
 #define PIN_SENSOR2 26
 

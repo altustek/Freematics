@@ -20,6 +20,9 @@
 #include "config.h"
 #include "telestore.h"
 #include "teleclient.h"
+#if BOOT_AT_PIPE_TIMEOUT
+#include "atpipe.h"
+#endif
 #if BOARD_HAS_PSRAM
 #include "esp32/himem.h"
 #endif
@@ -1733,6 +1736,11 @@ void setup()
 
   // show system information
   showSysInfo();
+
+#if BOOT_AT_PIPE_TIMEOUT
+  // before sys.begin() takes over the co-processor and modem UARTs
+  atPipe(BOOT_AT_PIPE_TIMEOUT);
+#endif
 
   bufman.init();
   
