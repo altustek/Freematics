@@ -707,6 +707,9 @@ bool waitMotion(long timeout)
 #if ENABLE_MEMS
   unsigned long t = millis();
   if (state.check(STATE_MEMS_READY)) {
+    // samples above the threshold since firstHit
+    uint8_t hits = 0;
+    uint32_t firstHit = 0;
     do {
       // calculate relative movement
       float motion = 0;
@@ -730,11 +733,17 @@ bool waitMotion(long timeout)
       serverProcess(100);
 #endif
       processBLE(100);
-      // check movement
+      // check movement: a door slam or a bump is a single spike, driving
+      // off keeps the device moving for several samples
       if (motion >= MOTION_THRESHOLD * MOTION_THRESHOLD) {
-        //lastMotionTime = millis();
-        Serial.println(motion);
-        return true;
+        if (!hits || millis() - firstHit > MOTION_CONFIRM_WINDOW) {
+          hits = 0;
+          firstHit = millis();
+        }
+        if (++hits >= MOTION_CONFIRM_SAMPLES) {
+          Serial.println(motion);
+          return true;
+        }
       }
     } while (state.check(STATE_STANDBY) && ((long)(millis() - t) < timeout || timeout == -1));
     return false;
