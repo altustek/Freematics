@@ -1,20 +1,16 @@
-// Sample local overrides for config.h. All values below are fake.
-// Copy to secrets.h (git-ignored) and fill in real values:
-//   cp sample_secrets.h secrets.h
-// Anything left undefined falls back to the defaults in config.h.
-
-// Known WiFi networks {ssid, password, metric}: the visible network with the
-// lowest metric wins, ties broken by signal strength.
+// Local overrides for config.h: WiFi credentials and server settings.
+// Template with fake values: cp sample_secrets.h secrets.h (git-ignored),
+// then fill in real ones. Anything left undefined uses the config.h default.
 #define WIFI_NETWORKS { \
-  {"HomeWifi",  "home-password",  10}, \
-  {"PhoneWifi", "phone-password", 20}, \
+  {"HomeWifi",  "home-password",  10}, /* HomeWifi */ \
+  {"PhoneWifi", "phone-password", 20}, /* PhoneWifi */ \
 }
 
-// HTTPD soft AP (password min 8 chars)
+// HTTPD soft AP password (min 8 chars)
 //#define WIFI_AP_SSID "TELELOGGER"
 #define WIFI_AP_PASSWORD "change-me-123"
 
-// Server (Freematics protocol, UDP)
+// Traccar server (Freematics protocol, UDP)
 #define SERVER_HOST "traccar.example.com"
 #define SERVER_PORT 5170
 //#define SERVER_PROTOCOL PROTOCOL_UDP
