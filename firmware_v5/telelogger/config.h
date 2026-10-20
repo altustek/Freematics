@@ -85,6 +85,11 @@
 #endif
 #define PID_IGNITION 0x92
 
+// don't enter standby while the engine runs (RPM > 0), even when stationary
+#ifndef STAY_AWAKE_ENGINE_RUNNING
+#define STAY_AWAKE_ENGINE_RUNNING 1
+#endif
+
 // keep reporting this long after the ECU stops answering before entering
 // standby (0: standby at once). GNSS and network stay up, so the parked
 // position is accurate and the server sees the ignition go off. Standby may

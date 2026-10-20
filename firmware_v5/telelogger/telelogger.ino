@@ -345,6 +345,10 @@ void processOBD(CBuffer* buffer)
     if (obd.readPID(pid, value)) {
         obdData[i].ts = millis();
         obdData[i].value = value;
+#if STAY_AWAKE_ENGINE_RUNNING
+        // an idling engine is not a parked vehicle: hold off the stationary timeout
+        if (pid == PID_RPM && value > 0) lastMotionTime = millis();
+#endif
 #if IGNITION_REPORT
         // a responding ECU means ignition on, even during engine auto-stop:
         // send RPM 0 as 1 so that rpm 0 is left to mean ignition off
