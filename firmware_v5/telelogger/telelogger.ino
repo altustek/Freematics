@@ -345,6 +345,11 @@ void processOBD(CBuffer* buffer)
     if (obd.readPID(pid, value)) {
         obdData[i].ts = millis();
         obdData[i].value = value;
+#if IGNITION_REPORT
+        // a responding ECU means ignition on, even during engine auto-stop:
+        // send RPM 0 as 1 so that rpm 0 is left to mean ignition off
+        if (pid == PID_RPM && value == 0) value = 1;
+#endif
         buffer->add((uint16_t)pid | 0x100, ELEMENT_INT32, &value, sizeof(value));
     } else {
         timeoutsOBD++;
@@ -747,20 +752,37 @@ void process()
   buffer->state = BUFFER_STATE_FILLING;
 
 #if ENABLE_OBD
+  // when the ECU stopped answering (0: answering or never seen)
+  static uint32_t ecuOffTime = 0;
   // process OBD data if connected
   if (state.check(STATE_OBD_READY)) {
     processOBD(buffer);
     if (obd.errors >= MAX_OBD_ERRORS) {
       if (!obd.init()) {
         Serial.println("[OBD] ECU OFF");
+#if IGNITION_OFF_LINGER
+        // keep reporting (ignition off, parked position) for a while
+        state.clear(STATE_OBD_READY);
+        ecuOffTime = millis();
+#else
         state.clear(STATE_OBD_READY | STATE_WORKING);
         return;
+#endif
       }
     }
   } else if (obd.init(PROTO_AUTO, true)) {
     state.set(STATE_OBD_READY);
+    ecuOffTime = 0;
     Serial.println("[OBD] ECU ON");
   }
+#if IGNITION_OFF_LINGER
+  if (ecuOffTime && millis() - ecuOffTime >= IGNITION_OFF_LINGER * 1000UL) {
+    Serial.println("[OBD] Ignition off, entering standby");
+    ecuOffTime = 0;
+    state.clear(STATE_WORKING);
+    return;
+  }
+#endif
 #endif
 
   if (rssi != rssiLast) {
@@ -777,6 +799,18 @@ void process()
     uint16_t v = batteryVoltage * 100;
     buffer->add(PID_BATTERY_VOLTAGE, ELEMENT_UINT16, &v, sizeof(v));
   }
+#if IGNITION_REPORT
+  {
+    // ignition on: ECU answering, or alternator charging (no OBD data)
+    int ign = state.check(STATE_OBD_READY) || batteryVoltage >= CHARGING_VOLTAGE;
+    buffer->add(PID_IGNITION, ELEMENT_INT32, &ign, sizeof(ign));
+    if (!ign) {
+      // explicit RPM 0 rather than no RPM at all
+      int rpm = 0;
+      buffer->add((uint16_t)PID_RPM | 0x100, ELEMENT_INT32, &rpm, sizeof(rpm));
+    }
+  }
+#endif
 #endif
 
 #if LOG_EXT_SENSORS

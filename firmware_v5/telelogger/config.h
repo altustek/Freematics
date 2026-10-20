@@ -74,6 +74,25 @@
 // maximum consecutive OBD access errors before entering standby
 #define MAX_OBD_ERRORS 3
 
+// report ignition state with every sample:
+//  - PID_IGNITION (0x92, Traccar attribute io146): 1 when the ECU answers or
+//    the alternator is charging (>= CHARGING_VOLTAGE), else 0
+//  - RPM (0x10C): a responding ECU at RPM 0 (engine auto-stop) is sent as 1,
+//    and RPM 0 is sent while the ignition is off, so rpm > 0 means ignition on
+// In Traccar add a computed attribute "ignition" = io146 == 1 (or rpm > 0).
+#ifndef IGNITION_REPORT
+#define IGNITION_REPORT 1
+#endif
+#define PID_IGNITION 0x92
+
+// keep reporting this long after the ECU stops answering before entering
+// standby (0: standby at once). GNSS and network stay up, so the parked
+// position is accurate and the server sees the ignition go off. Standby may
+// still come sooner through the STATIONARY_TIME_TABLE timeout.
+#ifndef IGNITION_OFF_LINGER
+#define IGNITION_OFF_LINGER 120 /* seconds */
+#endif
+
 /**************************************
 * Networking configurations
 **************************************/
