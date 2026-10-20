@@ -99,6 +99,13 @@ const WifiNet wifiNets[] = WIFI_NETWORKS;
 bool selectWifi()
 {
 #ifdef WIFI_NETWORKS
+  // scanning blocks for seconds and hops channels: keep the current choice
+  // between scans
+  static uint32_t lastScan = 0;
+  static bool scanned = false;
+  if (scanned && millis() - lastScan < WIFI_SCAN_INTERVAL * 1000UL) return curSSID[0] != 0;
+  scanned = true;
+  lastScan = millis();
   // add STA without dropping the HTTPD soft AP if it is running
   WiFi.mode((wifi_mode_t)(WiFi.getMode() | WIFI_MODE_STA));
   int n = WiFi.scanNetworks();
@@ -108,7 +115,7 @@ bool selectWifi()
   for (int i = 0; i < n; i++) {
     int rssi = WiFi.RSSI(i);
     if (rssi < WIFI_MIN_RSSI) continue;
-    for (int j = 0; j < sizeof(wifiNets) / sizeof(wifiNets[0]); j++) {
+    for (size_t j = 0; j < sizeof(wifiNets) / sizeof(wifiNets[0]); j++) {
       if (WiFi.SSID(i) != wifiNets[j].ssid) continue;
       if (best < 0 || wifiNets[j].metric < wifiNets[best].metric ||
           (wifiNets[j].metric == wifiNets[best].metric && rssi > bestRssi)) {
@@ -143,6 +150,8 @@ uint16_t dtc[6] = {0};
 float batteryVoltage = 0;
 // set in standby when the vehicle battery runs low; shared with telemetry task
 volatile bool lowBattery = false;
+// soft AP / BLE still up during the standby grace period
+volatile bool standbyRadiosOn = true;
 GPS_DATA* gd = 0;
 
 char devid[12] = {0};
@@ -979,8 +988,13 @@ void telemetry(void* inst)
         }
         teleClient.shutdown();
 #if ENABLE_WIFI && RESET_AFTER_WAKEUP
-        // radio back off until the next ping (see radiosOff)
+        // radio back off until the next ping (see radiosOff), but keep the
+        // HTTPD soft AP during the standby grace period
+#if ENABLE_HTTPD
+        WiFi.mode(standbyRadiosOn ? WIFI_AP : WIFI_OFF);
+#else
         WiFi.mode(WIFI_OFF);
+#endif
 #endif
         state.clear(STATE_CELL_CONNECTED | STATE_WIFI_CONNECTED);
       }
@@ -1163,20 +1177,19 @@ void radiosOff()
 }
 
 // switch radios off once the standby grace period is over (or battery is low)
-void standbyRadios(uint32_t standbyStart, bool& radiosOn)
+void standbyRadios(uint32_t standbyStart)
 {
 #if RESET_AFTER_WAKEUP
-  if (radiosOn && (lowBattery || millis() - standbyStart >= STANDBY_RADIO_OFF_DELAY * 1000UL)) {
+  if (standbyRadiosOn && (lowBattery || millis() - standbyStart >= STANDBY_RADIO_OFF_DELAY * 1000UL)) {
     radiosOff();
-    radiosOn = false;
+    standbyRadiosOn = false;
   }
 #endif
 }
 
-// read vehicle battery voltage and update the low battery flag
-void checkBattery()
+// update the low battery flag from a vehicle battery voltage reading
+void checkBattery(float v)
 {
-  float v = obd.getVoltage();
   if (v < MIN_VEHICLE_VOLTAGE) return; // no reading or bench/USB power
   batteryVoltage = v;
   if (!lowBattery && v < LOW_BATTERY_VOLTAGE) {
@@ -1216,26 +1229,35 @@ void standby()
   Serial.println("STANDBY");
   obd.enterLowPowerMode();
   uint32_t standbyStart = millis();
-  bool radiosOn = true;
+  standbyRadiosOn = true;
 #if ENABLE_MEMS
   calibrateMEMS();
+  uint32_t lastBattCheck = millis();
   for (;;) {
-    bool moved = waitMotion(BATTERY_CHECK_INTERVAL * 1000L);
+    long wait = BATTERY_CHECK_INTERVAL * 1000L - (long)(millis() - lastBattCheck);
+    bool moved = waitMotion(wait > 0 ? wait : 0);
     if (!state.check(STATE_STANDBY)) break; // woken by command
+    // with a low battery motion must not shorten the wait: each check wakes
+    // the OBD co-processor
+    bool due = (long)(millis() - lastBattCheck) >= BATTERY_CHECK_INTERVAL * 1000L;
+    if (!due && (lowBattery || !moved)) continue;
+    lastBattCheck = millis();
     bool wasLow = lowBattery;
-    checkBattery();
+    checkBattery(obd.getVoltage());
     if (wasLow && !lowBattery) break; // engine started, battery charging
-    standbyRadios(standbyStart, radiosOn);
+    standbyRadios(standbyStart);
     // with a low battery only a running engine may wake the device
     if (lowBattery) continue;
     if (moved) break;
   }
 #elif ENABLE_OBD
+  float v;
   do {
     delay(5000);
-    checkBattery();
-    standbyRadios(standbyStart, radiosOn);
-  } while (obd.getVoltage() < JUMPSTART_VOLTAGE);
+    v = obd.getVoltage();
+    checkBattery(v);
+    standbyRadios(standbyStart);
+  } while (v < JUMPSTART_VOLTAGE);
 #else
   delay(5000);
 #endif

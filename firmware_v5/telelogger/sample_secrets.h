@@ -2,8 +2,8 @@
 // Template with fake values: cp sample_secrets.h secrets.h (git-ignored),
 // then fill in real ones. Anything left undefined uses the config.h default.
 #define WIFI_NETWORKS { \
-  {"HomeWifi",  "home-password",  10}, /* HomeWifi */ \
-  {"PhoneWifi", "phone-password", 20}, /* PhoneWifi */ \
+  {"HomeWifi",  "home-password",  10}, \
+  {"PhoneWifi", "phone-password", 20}, \
 }
 
 // HTTPD soft AP password (min 8 chars)

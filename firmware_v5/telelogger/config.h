@@ -77,18 +77,22 @@
 /**************************************
 * Networking configurations
 **************************************/
-#ifndef ENABLE_WIFI
-#define ENABLE_WIFI 1
-// WiFi settings
-#define WIFI_SSID ""
-#define WIFI_PASSWORD ""
-#endif 
-
 // Local overrides (not committed): server host/port, APN, WiFi credentials.
 // Start from sample_secrets.h: cp sample_secrets.h secrets.h
 #if __has_include("secrets.h")
 #include "secrets.h"
 #endif
+
+#ifndef ENABLE_WIFI
+#define ENABLE_WIFI 1
+// WiFi settings
+#ifndef WIFI_SSID
+#define WIFI_SSID ""
+#endif
+#ifndef WIFI_PASSWORD
+#define WIFI_PASSWORD ""
+#endif
+#endif 
 
 // cellular network settings
 #ifndef CELL_APN
@@ -122,12 +126,13 @@
 // Known WiFi networks {ssid, password, metric}: the visible network with the
 // lowest metric wins, ties broken by signal strength. Falls back to
 // WIFI_SSID / NVS settings when none of these is in range.
-// Define WIFI_NETWORKS in secrets.h (not committed), e.g.
-// #define WIFI_NETWORKS { {"HomeSSID", "password", 10}, {"Hotspot", "password", 20}, }
+// Define WIFI_NETWORKS in secrets.h (see sample_secrets.h).
 // WiFi transmit power (library default is WIFI_POWER_8_5dBm)
 #define WIFI_TX_POWER WIFI_POWER_19_5dBm
 // ignore networks weaker than this (dBm)
 #define WIFI_MIN_RSSI -85
+// minimum time between scans for known networks while not connected
+#define WIFI_SCAN_INTERVAL 60 /* seconds */
 
 // WiFi Mesh settings
 #define WIFI_MESH_ID "123456"
@@ -139,6 +144,7 @@
 #endif
 #ifndef WIFI_AP_PASSWORD
 #define WIFI_AP_PASSWORD "PASSWORD"
+#define WIFI_AP_PASSWORD_DEFAULT 1
 #endif
 
 // maximum consecutive communication errors before resetting network
@@ -215,6 +221,9 @@
 // enable(1)/disable(0) http server
 #ifndef ENABLE_HTTPD
 #define ENABLE_HTTPD 1
+#endif
+#if ENABLE_HTTPD && WIFI_AP_PASSWORD_DEFAULT
+#warning "HTTPD soft AP uses the default password; set WIFI_AP_PASSWORD in secrets.h"
 #endif
 
 // enable(1)/disable(0) BLE SPP server (for Freematics Controller App).
