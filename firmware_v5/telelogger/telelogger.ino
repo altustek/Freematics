@@ -161,6 +161,9 @@ volatile bool lowBattery = false;
 CELL_INFO cellInfo = {0};
 volatile bool cellInfoNew = false;
 #endif
+// the telemetry task is using the co-processor link (GNSS for the standby
+// report); the link has no lock, so standby() holds off its ATRV reads
+volatile bool linkBusy = false;
 // soft AP / BLE still up during the standby grace period
 volatile bool standbyRadiosOn = true;
 GPS_DATA* gd = 0;
@@ -1033,6 +1036,8 @@ void sendStandbyReport(CStorageRAM& store, bool useGPS)
 
 #if GNSS == GNSS_STANDALONE && STANDBY_GPS_TIMEOUT
   if (useGPS) {
+    // internal GNSS goes through the co-processor link, shared with standby()
+    linkBusy = true;
     // GNSS is off in standby unless GNSS_ALWAYS_ON: power it up for a fix
     bool started = false;
     if (!state.check(STATE_GPS_READY) && initGPS()) {
@@ -1047,6 +1052,7 @@ void sendStandbyReport(CStorageRAM& store, bool useGPS)
       state.clear(STATE_GPS_READY | STATE_GPS_ONLINE);
       gd = 0;
     }
+    linkBusy = false;
   }
 #endif
 
@@ -1421,6 +1427,11 @@ void standby()
     // the OBD co-processor
     bool due = (long)(millis() - lastBattCheck) >= BATTERY_CHECK_INTERVAL * 1000L;
     if (!due && (lowBattery || !moved)) continue;
+    if (linkBusy) {
+      // standby report is using the link: check the battery once it is done
+      if (moved && !lowBattery) break;
+      continue;
+    }
     lastBattCheck = millis();
     bool wasLow = lowBattery;
     checkBattery(obd.getVoltage());
@@ -1434,6 +1445,11 @@ void standby()
   float v;
   do {
     delay(5000);
+    if (linkBusy) {
+      // standby report is using the link
+      v = 0;
+      continue;
+    }
     v = obd.getVoltage();
     checkBattery(v);
     standbyRadios(standbyStart);
@@ -1650,7 +1666,7 @@ void processBLE(int timeout)
     }
     if (pid) {
       int value;
-      if (obd.readPID(pid, value)) {
+      if (!linkBusy && obd.readPID(pid, value)) {
         n += snprintf(buf + n, bufsize - n, "%d", value);
       } else {
         n += snprintf(buf + n, bufsize - n, "N/A");
