@@ -90,6 +90,16 @@
 #define STAY_AWAKE_ENGINE_RUNNING 1
 #endif
 
+// send the serving cell (when on cellular, and only when it changes) as
+// PIDs 0x41-0x44: MCC, MNC, LAC/TAC, cell ID (Traccar io65-io68)
+#ifndef CELL_INFO_REPORT
+#define CELL_INFO_REPORT 1
+#endif
+#define PID_CELL_MCC 0x41
+#define PID_CELL_MNC 0x42
+#define PID_CELL_LAC 0x43
+#define PID_CELL_CID 0x44
+
 // keep reporting this long after the ECU stops answering before entering
 // standby (0: standby at once). GNSS and network stay up, so the parked
 // position is accurate and the server sees the ignition go off. Standby may

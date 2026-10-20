@@ -153,6 +153,11 @@ uint16_t dtc[6] = {0};
 float batteryVoltage = 0;
 // set in standby when the vehicle battery runs low; shared with telemetry task
 volatile bool lowBattery = false;
+#if CELL_INFO_REPORT
+// serving cell, from the telemetry task; process() sends it when it changes
+CELL_INFO cellInfo = {0};
+volatile bool cellInfoNew = false;
+#endif
 // soft AP / BLE still up during the standby grace period
 volatile bool standbyRadiosOn = true;
 GPS_DATA* gd = 0;
@@ -806,6 +811,16 @@ void process()
     int val = (rssiLast = rssi);
     buffer->add(PID_CSQ, ELEMENT_INT32, &val, sizeof(val));
   }
+#if CELL_INFO_REPORT
+  if (cellInfoNew) {
+    cellInfoNew = false;
+    CELL_INFO ci = cellInfo;
+    buffer->add(PID_CELL_MCC, ELEMENT_UINT16, &ci.mcc, sizeof(ci.mcc));
+    buffer->add(PID_CELL_MNC, ELEMENT_UINT16, &ci.mnc, sizeof(ci.mnc));
+    buffer->add(PID_CELL_LAC, ELEMENT_UINT32, &ci.lac, sizeof(ci.lac));
+    buffer->add(PID_CELL_CID, ELEMENT_UINT32, &ci.cid, sizeof(ci.cid));
+  }
+#endif
 #if ENABLE_OBD
   if (sys.devType > 12) {
     batteryVoltage = (float)(analogRead(A0) * 45) / 4095;
@@ -1209,6 +1224,15 @@ void telemetry(void* inst)
 #endif
         {
           rssi = teleClient.cell.RSSI();
+#if CELL_INFO_REPORT
+          CELL_INFO ci;
+          if (teleClient.cell.getCellInfo(ci) && (ci.cid != cellInfo.cid || ci.lac != cellInfo.lac ||
+              ci.mcc != cellInfo.mcc || ci.mnc != cellInfo.mnc)) {
+            cellInfo = ci;
+            cellInfoNew = true;
+            Serial.printf("[CELL] Cell %u-%u LAC:%X CID:%u\n", (unsigned)ci.mcc, (unsigned)ci.mnc, (unsigned)ci.lac, (unsigned)ci.cid);
+          }
+#endif
         }
         if (rssi) {
           Serial.print("RSSI:");

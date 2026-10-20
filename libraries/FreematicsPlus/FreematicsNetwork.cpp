@@ -511,6 +511,41 @@ int CellSIMCOM::RSSI()
   return 0;
 }
 
+// "0x"-prefixed hex or decimal
+static unsigned long parseCellNum(const char* s, char** end)
+{
+  if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) return strtoul(s + 2, end, 16);
+  return strtoul(s, end, 10);
+}
+
+bool CellSIMCOM::getCellInfo(CELL_INFO& info)
+{
+  // +CPSI: LTE,Online,310-410,0x2D0B,27447554,...
+  // +CPSI: GSM,Online,460-00,0x182d,12401,...
+  // +CPSI: NO SERVICE,Online
+  if (!sendCommand("AT+CPSI?\r", 1000)) return false;
+  char* p = strstr(m_buffer, "+CPSI:");
+  if (!p) return false;
+  // skip system mode and operation mode
+  for (byte n = 0; n < 2; n++) {
+    if (!(p = strchr(p + 1, ','))) return false;
+  }
+  char* end;
+  unsigned long mcc = strtoul(++p, &end, 10);
+  if (end == p || *end != '-') return false;
+  unsigned long mnc = strtoul(p = end + 1, &end, 10);
+  if (end == p || *end != ',') return false;
+  unsigned long lac = parseCellNum(p = end + 1, &end);
+  if (end == p || *end != ',') return false;
+  unsigned long cid = parseCellNum(p = end + 1, &end);
+  if (end == p) return false;
+  info.mcc = mcc;
+  info.mnc = mnc;
+  info.lac = lac;
+  info.cid = cid;
+  return true;
+}
+
 String CellSIMCOM::getOperatorName()
 {
   if (sendCommand("AT+COPS?\r")) {

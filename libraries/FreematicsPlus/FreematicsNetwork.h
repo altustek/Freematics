@@ -46,6 +46,14 @@ typedef struct {
     uint8_t second;
 } NET_LOCATION;
 
+// serving cell
+typedef struct {
+    uint16_t mcc;
+    uint16_t mnc;
+    uint32_t lac; // LAC (GSM/WCDMA) or TAC (LTE)
+    uint32_t cid;
+} CELL_INFO;
+
 class HTTPClient
 {
 public:
@@ -115,6 +123,7 @@ public:
     virtual String getIP();
     int RSSI();
     String getOperatorName();
+    bool getCellInfo(CELL_INFO& info);
     bool checkSIM(const char* pin = 0);
     virtual String queryIP(const char* host);
     virtual bool getLocation(GPS_DATA** pgd);
