@@ -350,17 +350,12 @@ bool COBD::isValidPID(byte pid)
 	return (pidmap[i] & b) != 0;
 }
 
-bool COBD::init(OBD_PROTOCOLS protocol, bool quick)
+// reset the co-processor and apply the basic settings
+bool COBD::startLink(OBD_PROTOCOLS protocol)
 {
 	const char *initcmd[] = {"ATE0\r", "ATH0\r"};
 	char buffer[64];
 	bool success = false;
-
-	if (!link) {
-		return false;
-	}
-
-	m_state = OBD_DISCONNECTED;
 	for (byte n = 0; n < 3; n++) {
 		if (link->sendCommand("ATZ\r", buffer, sizeof(buffer), OBD_TIMEOUT_SHORT)) {
 			success = true;
@@ -377,28 +372,73 @@ bool COBD::init(OBD_PROTOCOLS protocol, bool quick)
 			return false;
 		}
 	}
-	if (protocol == PROTO_J1939) {
-		m_state = OBD_CONNECTED;
-		errors = 0;
-		return true;
+	return true;
+}
+
+// send each command of a ';'-separated set, all must answer OK
+bool COBD::sendCommandSet(const char* set)
+{
+	char cmd[32];
+	char buffer[64];
+	while (*set) {
+		const char* end = strchr(set, ';');
+		size_t len = end ? (size_t)(end - set) : strlen(set);
+		if (len >= sizeof(cmd) - 1) return false;
+		memcpy(cmd, set, len);
+		cmd[len] = '\r';
+		cmd[len + 1] = 0;
+		if (!link->sendCommand(cmd, buffer, sizeof(buffer), OBD_TIMEOUT_SHORT) || !strstr(buffer, "OK")) {
+			return false;
+		}
+		set += len;
+		if (*set == ';') set++;
+	}
+	return true;
+}
+
+bool COBD::init(OBD_PROTOCOLS protocol, bool quick)
+{
+	char buffer[64];
+	bool success = false;
+
+	if (!link) {
+		return false;
+	}
+
+	m_state = OBD_DISCONNECTED;
+	// candidates: -1 is the default settings, 0.. the alternate command sets;
+	// the one that worked last is tried first, a quick init tries only that one
+	for (int8_t n = -1; n < (quick ? 0 : (int8_t)altInitCount) && !success; n++) {
+		int8_t set = n < 0 ? altInitUsed : (n == altInitUsed ? -1 : n);
+		if (!startLink(protocol)) return false;
+		if (protocol == PROTO_J1939) {
+			m_state = OBD_CONNECTED;
+			errors = 0;
+			return true;
+		}
+		if (set >= 0 && !sendCommandSet(altInit[set])) continue;
+		for (byte i = 0; i < (quick ? 1 : 2) && !success; i++) {
+			int value;
+			success = readPID(PID_SPEED, value);
+		}
+		if (success) altInitUsed = set;
+	}
+	if (!success) return false;
+	if (!quick) {
+		// protocol in use, if the co-processor reports it
+		protocolName[0] = 0;
+		if (link->sendCommand("ATDP\r", buffer, sizeof(buffer), OBD_TIMEOUT_SHORT) &&
+				!strchr(buffer, '?') && !checkErrorMessage(buffer)) {
+			char* p = buffer;
+			while (*p == '\r' || *p == '\n' || *p == ' ') p++;
+			size_t len = strcspn(p, "\r\n>");
+			if (len >= sizeof(protocolName)) len = sizeof(protocolName) - 1;
+			memcpy(protocolName, p, len);
+			protocolName[len] = 0;
+		}
 	}
 
 	success = false;
-	if (quick) {
-		int value;
-		if (!readPID(PID_SPEED, value)) return false;
-	} else {
-		for (byte n = 0; n < 2; n++) {
-			int value;
-			if (readPID(PID_SPEED, value)) {
-				success = true;
-				break;
-			}
-		}
-		if (!success) {
-			return false;
-		}
-	}
 
 	// load pid map
 	memset(pidmap, 0xff, sizeof(pidmap));

@@ -23,6 +23,12 @@ public:
 	void begin(CLink* link) { this->link = link; }
 	// initialize OBD-II connection
 	bool init(OBD_PROTOCOLS protocol = PROTO_AUTO, bool quick = false);
+	// command sets for init() to try when the ECU doesn't answer with the
+	// default settings, each a ';'-separated list of AT commands such as
+	// "ATSP6;ATCF7E8;ATCM7F8" (the array must outlive this object)
+	void setAltInit(const char* const* sets, byte count) { altInit = sets; altInitCount = count; altInitUsed = -1; }
+	// protocol reported by the co-processor (ATDP) after a full init, if any
+	char protocolName[32] = {0};
 	// reset OBD-II connection
 	void reset();
 	// un-initialize OBD-II connection
@@ -81,7 +87,13 @@ protected:
 	int normalizeData(byte pid, char* data);
 	byte checkErrorMessage(const char* buffer);
 	char* getResultValue(char* buf);
+	bool startLink(OBD_PROTOCOLS protocol);
+	bool sendCommandSet(const char* set);
 	OBD_STATES m_state = OBD_DISCONNECTED;
+	const char* const* altInit = 0;
+	byte altInitCount = 0;
+	// set that got the ECU to answer last time (-1: default settings)
+	int8_t altInitUsed = -1;
 };
 
 #endif

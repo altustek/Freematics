@@ -614,7 +614,12 @@ void initialize()
   if (!state.check(STATE_OBD_READY)) {
     timeoutsOBD = 0;
     if (obd.init()) {
-      Serial.println("OBD:OK");
+      Serial.print("OBD:OK");
+      if (obd.protocolName[0]) {
+        Serial.print(' ');
+        Serial.print(obd.protocolName);
+      }
+      Serial.println();
       state.set(STATE_OBD_READY);
 #if ENABLE_OLED
       oled.println("OBD OK");
@@ -1739,6 +1744,10 @@ void setup()
     Serial.print("TYPE:");
     Serial.println(sys.devType);
     obd.begin(sys.link);
+#ifdef OBD_ALT_INIT_CMDS
+    static const char* const obdAltInit[] = OBD_ALT_INIT_CMDS;
+    obd.setAltInit(obdAltInit, sizeof(obdAltInit) / sizeof(obdAltInit[0]));
+#endif
   }
 #else
   sys.begin(false, true);

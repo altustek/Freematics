@@ -74,6 +74,17 @@
 // maximum consecutive OBD access errors before entering standby
 #define MAX_OBD_ERRORS 3
 
+// AT command sets to try when the ECU doesn't answer with the default (auto
+// protocol) settings, each a ';'-separated list. The set that worked is tried
+// first next time. Undefined: default settings only. Commands:
+//   ATSP n  protocol: 6 = CAN 11-bit 500k, 7 = CAN 29-bit 500k,
+//           8 = CAN 11-bit 250k, 9 = CAN 29-bit 250k
+//   ATCF h  CAN receive filter, ATCM h  CAN receive mask (0: accept all)
+// Toyota (from the ankostis fork):
+//#define OBD_ALT_INIT_CMDS {"ATSP7;ATCF18DAF101;ATCM1FFFFF00", "ATSP6;ATCF7E8;ATCM7F8"}
+// generic, no CAN mask:
+//#define OBD_ALT_INIT_CMDS {"ATSP7;ATCM0", "ATSP6;ATCM0"}
+
 // report ignition state with every sample:
 //  - PID_IGNITION (0x92, Traccar attribute io146): 1 when the ECU answers or
 //    the alternator is charging (>= CHARGING_VOLTAGE), else 0
