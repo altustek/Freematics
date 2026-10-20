@@ -53,6 +53,8 @@ typedef struct {
   uint32_t ts;
 } PID_POLLING_INFO;
 
+// tiers must be in ascending order, 1..MAX_POLLING_TIER
+#define MAX_POLLING_TIER 3
 PID_POLLING_INFO obdData[]= {
   {PID_SPEED, 1},
   {PID_RPM, 1},
@@ -308,19 +310,26 @@ int handlerLiveData(UrlHandlerParam* param)
 #if ENABLE_OBD
 void processOBD(CBuffer* buffer)
 {
-  static int idx[2] = {0, 0};
-  int tier = 1;
-  for (byte i = 0; i < sizeof(obdData) / sizeof(obdData[0]); i++) {
+  // round-robin offset per tier 2..MAX_POLLING_TIER (bounds-safe, upstream PR #148)
+  static byte idx[MAX_POLLING_TIER - 1] = {0};
+  const byte count = sizeof(obdData) / sizeof(obdData[0]);
+  byte tier = 1;
+  for (byte i = 0; i < count; i++) {
     if (obdData[i].tier > tier) {
-        // reset previous tier index
-        idx[tier - 2] = 0;
+        // reset previous tier index (tier 1 has none)
+        if (tier > 1) idx[tier - 2] = 0;
         // keep new tier number
         tier = obdData[i].tier;
         // move up current tier index
         i += idx[tier - 2]++;
-        // check if into next tier
+        if (i >= count) {
+            // past the end of the table: wrap this tier
+            idx[tier - 2] = 0;
+            break;
+        }
         if (obdData[i].tier != tier) {
-            idx[tier - 2]= 0;
+            // past the end of this tier: wrap it, move on to the next tier
+            idx[tier - 2] = 0;
             i--;
             continue;
         }
