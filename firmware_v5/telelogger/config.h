@@ -85,8 +85,7 @@
 #endif 
 
 // Local overrides (not committed): server host/port, APN, WiFi credentials.
-// e.g. #define SERVER_HOST "traccar.example.com"
-//      #define SERVER_PORT 5170
+// Start from sample_secrets.h: cp sample_secrets.h secrets.h
 #if __has_include("secrets.h")
 #include "secrets.h"
 #endif
