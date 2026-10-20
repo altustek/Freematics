@@ -26,7 +26,7 @@ public:
 	// command sets for init() to try when the ECU doesn't answer with the
 	// default settings, each a ';'-separated list of AT commands such as
 	// "ATSP6;ATCF7E8;ATCM7F8" (the array must outlive this object)
-	void setAltInit(const char* const* sets, byte count) { altInit = sets; altInitCount = count; altInitUsed = -1; }
+	void setAltInit(const char* const* sets, byte count) { altInit = sets; altInitCount = count; altInitUsed = -2; altInitNext = -1; }
 	// protocol reported by the co-processor (ATDP) after a full init, if any
 	// (only queried when alternate sets are configured)
 	char protocolName[32] = {0};
@@ -90,11 +90,15 @@ protected:
 	char* getResultValue(char* buf);
 	bool startLink(OBD_PROTOCOLS protocol);
 	bool sendCommandSet(const char* set);
+	int8_t tryInit(OBD_PROTOCOLS protocol, int8_t set, byte tries);
 	OBD_STATES m_state = OBD_DISCONNECTED;
 	const char* const* altInit = 0;
 	byte altInitCount = 0;
-	// set that got the ECU to answer last time (-1: default settings)
-	int8_t altInitUsed = -1;
+	// set that got the ECU to answer last time (-1: default settings,
+	// -2: none yet)
+	int8_t altInitUsed = -2;
+	// next candidate for quick init while none has worked
+	int8_t altInitNext = -1;
 };
 
 #endif

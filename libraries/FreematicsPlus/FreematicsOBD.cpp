@@ -396,6 +396,22 @@ bool COBD::sendCommandSet(const char* set)
 	return true;
 }
 
+// reset the link, apply alternate set (-1: none) and see if the ECU answers:
+// 1 it does, 0 it doesn't, -1 the co-processor doesn't respond
+int8_t COBD::tryInit(OBD_PROTOCOLS protocol, int8_t set, byte tries)
+{
+	if (!startLink(protocol)) return -1;
+	if (set >= 0 && !sendCommandSet(altInit[set])) return 0;
+	for (byte i = 0; i < tries; i++) {
+		int value;
+		if (readPID(PID_SPEED, value)) {
+			altInitUsed = set;
+			return 1;
+		}
+	}
+	return 0;
+}
+
 bool COBD::init(OBD_PROTOCOLS protocol, bool quick)
 {
 	char buffer[64];
@@ -406,22 +422,34 @@ bool COBD::init(OBD_PROTOCOLS protocol, bool quick)
 	}
 
 	m_state = OBD_DISCONNECTED;
-	// candidates: -1 is the default settings, 0.. the alternate command sets;
-	// the one that worked last is tried first, a quick init tries only that one
-	for (int8_t n = -1; n < (quick ? 0 : (int8_t)altInitCount) && !success; n++) {
-		int8_t set = n < 0 ? altInitUsed : (n == altInitUsed ? -1 : n);
+	if (protocol == PROTO_J1939) {
 		if (!startLink(protocol)) return false;
-		if (protocol == PROTO_J1939) {
-			m_state = OBD_CONNECTED;
-			errors = 0;
-			return true;
+		m_state = OBD_CONNECTED;
+		errors = 0;
+		return true;
+	}
+	// candidates: -1 is the default settings, 0.. the alternate command sets
+	if (quick) {
+		// one candidate per call: the one that worked last, or while none
+		// has, each in turn (a full init may have run before the ignition)
+		int8_t set = altInitUsed;
+		if (set < -1) {
+			set = altInitNext;
+			altInitNext = altInitNext + 1 < (int8_t)altInitCount ? altInitNext + 1 : -1;
 		}
-		if (set >= 0 && !sendCommandSet(altInit[set])) continue;
-		for (byte i = 0; i < (quick ? 1 : 2) && !success; i++) {
-			int value;
-			success = readPID(PID_SPEED, value);
+		int8_t r = tryInit(protocol, set, 1);
+		if (r < 0) return false;
+		success = r > 0;
+	} else {
+		// all of them, the one that worked last first
+		int8_t first = altInitUsed >= 0 ? altInitUsed : -1;
+		for (int8_t n = -2; n < (int8_t)altInitCount && !success; n++) {
+			int8_t set = n < -1 ? first : n;
+			if (n >= -1 && set == first) continue;
+			int8_t r = tryInit(protocol, set, 2);
+			if (r < 0) return false;
+			success = r > 0;
 		}
-		if (success) altInitUsed = set;
 	}
 	if (!success) return false;
 	if (!quick && altInitCount) {
