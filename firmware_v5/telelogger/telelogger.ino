@@ -714,7 +714,11 @@ bool waitMotion(long timeout)
       // calculate relative movement
       float motion = 0;
       float acc[3];
-      if (!mems->read(acc)) continue;
+      float temp;
+      // temperature too, for the standby report
+      if (!mems->read(acc, 0, 0, &temp)) continue;
+      deviceTemp = (int)temp;
+      deviceTempX10 = (int)(temp * 10);
       if (accCount == 10) {
         accCount = 0;
         accSum[0] = 0;
@@ -995,6 +999,69 @@ bool initCell(bool quick = false)
   return state.check(STATE_CELL_CONNECTED);
 }
 
+// a full sample while parked, sent after a standby ping (the UDP socket is
+// open): position if GNSS gets a fix within STANDBY_GPS_TIMEOUT, battery
+// voltage, temperature and the ignition-off markers. Without a fix Traccar
+// keeps the last known position.
+void sendStandbyReport(CStorageRAM& store, bool useGPS)
+{
+  CBuffer* buffer = bufman.getFree();
+  buffer->state = BUFFER_STATE_FILLING;
+
+#if GNSS == GNSS_STANDALONE && STANDBY_GPS_TIMEOUT
+  if (useGPS) {
+    // GNSS is off in standby unless GNSS_ALWAYS_ON: power it up for a fix
+    bool started = false;
+    if (!state.check(STATE_GPS_READY) && initGPS()) {
+      state.set(STATE_GPS_READY);
+      started = true;
+    }
+    for (uint32_t t = millis(); state.check(STATE_STANDBY) && millis() - t < STANDBY_GPS_TIMEOUT * 1000UL; delay(1000)) {
+      if (processGPS(buffer)) break;
+    }
+    if (started) {
+      sys.gpsEnd(true);
+      state.clear(STATE_GPS_READY | STATE_GPS_ONLINE);
+      gd = 0;
+    }
+  }
+#endif
+
+  // last reading from standby(): reading the OBD link here would race it
+  if (batteryVoltage) {
+    uint16_t v = batteryVoltage * 100;
+    buffer->add(PID_BATTERY_VOLTAGE, ELEMENT_UINT16, &v, sizeof(v));
+  }
+#if IGNITION_REPORT
+  int off = 0;
+  buffer->add(PID_IGNITION, ELEMENT_INT32, &off, sizeof(off));
+  buffer->add((uint16_t)PID_RPM | 0x100, ELEMENT_INT32, &off, sizeof(off));
+#endif
+  if (!state.check(STATE_MEMS_READY)) {
+    deviceTemp = readChipTemperature();
+    deviceTempX10 = deviceTemp * 10;
+  }
+#if TEMP_TENTHS
+  buffer->add(PID_DEVICE_TEMP, ELEMENT_INT32, &deviceTempX10, sizeof(deviceTempX10));
+#else
+  buffer->add(PID_DEVICE_TEMP, ELEMENT_INT32, &deviceTemp, sizeof(deviceTemp));
+#endif
+  buffer->timestamp = millis();
+  buffer->state = BUFFER_STATE_FILLED;
+
+#if SERVER_PROTOCOL == PROTOCOL_UDP
+  store.header(devid);
+#endif
+  store.timestamp(buffer->timestamp);
+  buffer->serialize(store);
+  bufman.free(buffer);
+  store.tailer();
+  Serial.print("[STBY] ");
+  Serial.println(store.buffer());
+  teleClient.transmit(store.buffer(), store.length());
+  store.purge();
+}
+
 /*******************************************************************************
   Initializing network, maintaining connection and doing transmissions
 *******************************************************************************/
@@ -1002,6 +1069,8 @@ void telemetry(void* inst)
 {
   uint32_t lastRssiTime = 0;
   uint8_t connErrors = 0;
+  // the server was told about the low battery (last ping before going quiet)
+  bool lowBatteryReported = false;
   CStorageRAM store;
   store.init(
 #if BOARD_HAS_PSRAM
@@ -1025,16 +1094,24 @@ void telemetry(void* inst)
       teleClient.reset();
       bufman.purge();
 
+      if (!lowBattery) lowBatteryReported = false;
       uint32_t t = millis();
       do {
         delay(1000);
-      } while (state.check(STATE_STANDBY) && millis() - t < 1000L * PING_BACK_INTERVAL);
+        // a battery that just went low is reported without waiting
+      } while (state.check(STATE_STANDBY) && millis() - t < 1000L * PING_BACK_INTERVAL &&
+               !(lowBattery && !lowBatteryReported));
       if (state.check(STATE_STANDBY) && lowBattery) {
-        Serial.println("[NET] Low battery, ping skipped");
-        continue;
+        if (lowBatteryReported) {
+          Serial.println("[NET] Low battery, ping skipped");
+          continue;
+        }
+        // one last ping, without GNSS, so the server knows why we go quiet
+        lowBatteryReported = true;
       }
       if (state.check(STATE_STANDBY)) {
         // start ping
+        bool pinged = false;
 #if ENABLE_WIFI
         if (selectWifi()) {
           Serial.print("[WIFI] Joining SSID:");
@@ -1043,15 +1120,19 @@ void telemetry(void* inst)
         }
         if (teleClient.wifi.setup()) {
           Serial.println("[WIFI] Ping...");
-          teleClient.ping();
+          pinged = teleClient.ping();
         }
         else
 #endif
         {
           if (initCell()) {
             Serial.println("[CELL] Ping...");
-            teleClient.ping();
+            pinged = teleClient.ping();
           }
+        }
+        if (pinged) {
+          sendStandbyReport(store, !lowBattery);
+          if (lowBattery) teleClient.notify(EVENT_LOW_BATTERY);
         }
         teleClient.shutdown();
 #if ENABLE_WIFI && RESET_AFTER_WAKEUP

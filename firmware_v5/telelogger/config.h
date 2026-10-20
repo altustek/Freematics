@@ -183,6 +183,10 @@
 #define STATIONARY_TIME_TABLE {10, 60, 180} /* seconds */
 #define DATA_INTERVAL_TABLE {1000, 2000, 5000} /* ms */
 #define PING_BACK_INTERVAL 900 /* seconds */
+// each standby ping is followed by a full report (position, battery,
+// temperature); GNSS is powered up for at most this long to get a fix
+// (0: no GNSS, the report goes without a position)
+#define STANDBY_GPS_TIMEOUT 90 /* seconds */
 #define SIGNAL_CHECK_INTERVAL 10 /* seconds */
 
 /**************************************
