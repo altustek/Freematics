@@ -77,7 +77,8 @@ float gyr[3] = {0};
 float mag[3] = {0};
 uint8_t accCount = 0;
 #endif
-int deviceTemp = 0;
+int deviceTemp = 0; // degC, for the cooling-down check
+int deviceTempX10 = 0; // 0.1 degC, as PID_DEVICE_TEMP is sent with TEMP_TENTHS
 
 // config data
 char apn[32];
@@ -246,11 +247,15 @@ void printTimeoutStats()
 
 void beep(int duration)
 {
-    // turn on buzzer at 2000Hz frequency 
+#if SILENT
+    (void)duration;
+#else
+    // turn on buzzer at 2000Hz frequency
     sys.buzzer(2000);
     delay(duration);
     // turn off buzzer
     sys.buzzer(0);
+#endif
 }
 
 #if LOG_EXT_SENSORS
@@ -476,6 +481,7 @@ void processMEMS(CBuffer* buffer)
   if (!mems->read(acc, gyr, mag, &temp)) return;
 #endif
   deviceTemp = (int)temp;
+  deviceTempX10 = (int)(temp * 10); // keep the MEMS sensor's 0.1 degC resolution
 
   accSum[0] += acc[0];
   accSum[1] += acc[1];
@@ -799,8 +805,13 @@ void process()
 
   if (!state.check(STATE_MEMS_READY)) {
     deviceTemp = readChipTemperature();
+    deviceTempX10 = deviceTemp * 10;
   }
+#if TEMP_TENTHS
+  buffer->add(PID_DEVICE_TEMP, ELEMENT_INT32, &deviceTempX10, sizeof(deviceTempX10));
+#else
   buffer->add(PID_DEVICE_TEMP, ELEMENT_INT32, &deviceTemp, sizeof(deviceTemp));
+#endif
 
   buffer->timestamp = millis();
   buffer->state = BUFFER_STATE_FILLED;

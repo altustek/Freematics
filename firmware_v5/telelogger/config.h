@@ -217,6 +217,16 @@
 #define PIN_SENSOR2 26
 
 #define COOLING_DOWN_TEMP 75 /* celsius degrees */
+// send device temperature (PID 0x82) in 0.1 degC: Traccar's Freematics decoder
+// divides it by 10. Set to 0 for whole degrees (Freematics Hub).
+#ifndef TEMP_TENTHS
+#define TEMP_TENTHS 1
+#endif
+
+// set to 1 to silence the buzzer (no connection beeps)
+#ifndef SILENT
+#define SILENT 0
+#endif
 
 // enable(1)/disable(0) http server
 #ifndef ENABLE_HTTPD
