@@ -1419,6 +1419,9 @@ void standby()
 #if ENABLE_MEMS
   calibrateMEMS();
   uint32_t lastBattCheck = millis();
+  // a resting (not charging) battery was seen: charging after that means the
+  // engine started, a battery charger connected before parking does not count
+  bool sawResting = false;
   for (;;) {
     long wait = BATTERY_CHECK_INTERVAL * 1000L - (long)(millis() - lastBattCheck);
     bool moved = waitMotion(wait > 0 ? wait : 0);
@@ -1433,9 +1436,17 @@ void standby()
       continue;
     }
     lastBattCheck = millis();
-    bool wasLow = lowBattery;
-    checkBattery(obd.getVoltage());
-    if (wasLow && !lowBattery) break; // engine started, battery charging
+    float v = obd.getVoltage();
+    checkBattery(v);
+    if (v >= MIN_VEHICLE_VOLTAGE) {
+      if (v < CHARGING_VOLTAGE) {
+        sawResting = true;
+      } else if (sawResting) {
+        // engine started: wake even if motion was too gentle to trigger
+        Serial.printf("[BATT] Charging %.1fV, waking up\n", v);
+        break;
+      }
+    }
     standbyRadios(standbyStart);
     // with a low battery only a running engine may wake the device
     if (lowBattery) continue;

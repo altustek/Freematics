@@ -244,8 +244,9 @@
 #define MOTION_THRESHOLD 0.4f /* vehicle motion threshold in G */
 // samples above MOTION_THRESHOLD needed within MOTION_CONFIRM_WINDOW to wake
 // up, so a door slam doesn't (1: wake on the first one). Samples are about
-// 100-200 ms apart.
-#define MOTION_CONFIRM_SAMPLES 3
+// 100-200 ms apart. Standby also wakes when the battery starts charging
+// (engine running), checked every BATTERY_CHECK_INTERVAL.
+#define MOTION_CONFIRM_SAMPLES 2
 #define MOTION_CONFIRM_WINDOW 2000 /* ms */
 // engine jumpstart voltage for waking up (when MEMS unavailable) 
 #define JUMPSTART_VOLTAGE 14 /* V */
