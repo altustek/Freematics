@@ -1576,6 +1576,8 @@ void processBLE(int timeout)
 
   char *p = strchr(cmd, '\r');
   if (p) *p = 0;
+  // the telemetry task may clear gd (standby report) between check and use
+  GPS_DATA* g = gd;
   char buf[48];
   int bufsize = sizeof(buf);
   int n = 0;
@@ -1687,18 +1689,18 @@ void processBLE(int timeout)
     }
   } else if (!strcmp(cmd, "VIN")) {
     n += snprintf(buf + n, bufsize - n, "%s", vin[0] ? vin : "N/A");
-  } else if (!strcmp(cmd, "LAT") && gd) {
-    n += snprintf(buf + n, bufsize - n, "%f", gd->lat);
-  } else if (!strcmp(cmd, "LNG") && gd) {
-    n += snprintf(buf + n, bufsize - n, "%f", gd->lng);
-  } else if (!strcmp(cmd, "ALT") && gd) {
-    n += snprintf(buf + n, bufsize - n, "%d", (int)gd->alt);
-  } else if (!strcmp(cmd, "SAT") && gd) {
-    n += snprintf(buf + n, bufsize - n, "%u", (unsigned int)gd->sat);
-  } else if (!strcmp(cmd, "SPD") && gd) {
-    n += snprintf(buf + n, bufsize - n, "%d", (int)(gd->speed * 1852 / 1000));
-  } else if (!strcmp(cmd, "CRS") && gd) {
-    n += snprintf(buf + n, bufsize - n, "%u", (unsigned int)gd->heading);
+  } else if (!strcmp(cmd, "LAT") && g) {
+    n += snprintf(buf + n, bufsize - n, "%f", g->lat);
+  } else if (!strcmp(cmd, "LNG") && g) {
+    n += snprintf(buf + n, bufsize - n, "%f", g->lng);
+  } else if (!strcmp(cmd, "ALT") && g) {
+    n += snprintf(buf + n, bufsize - n, "%d", (int)g->alt);
+  } else if (!strcmp(cmd, "SAT") && g) {
+    n += snprintf(buf + n, bufsize - n, "%u", (unsigned int)g->sat);
+  } else if (!strcmp(cmd, "SPD") && g) {
+    n += snprintf(buf + n, bufsize - n, "%d", (int)(g->speed * 1852 / 1000));
+  } else if (!strcmp(cmd, "CRS") && g) {
+    n += snprintf(buf + n, bufsize - n, "%u", (unsigned int)g->heading);
   } else {
     n += snprintf(buf + n, bufsize - n, "ERROR");
   }
