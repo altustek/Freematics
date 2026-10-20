@@ -84,12 +84,22 @@
 #define WIFI_PASSWORD ""
 #endif 
 
-#ifndef SERVER_HOST
+// Local overrides (not committed): server host/port, APN, WiFi credentials.
+// e.g. #define SERVER_HOST "traccar.example.com"
+//      #define SERVER_PORT 5170
+#if __has_include("wifi_secrets.h")
+#include "wifi_secrets.h"
+#endif
+
 // cellular network settings
+#ifndef CELL_APN
 #define CELL_APN "hologram"
-// Traccar server (Freematics protocol, UDP)
+#endif
+// server settings (Freematics protocol)
+#ifndef SERVER_HOST
 #define SERVER_HOST "hub.freematics.com"
-#define SERVER_PORT 5170
+#endif
+#ifndef SERVER_PROTOCOL
 #define SERVER_PROTOCOL PROTOCOL_UDP
 #endif
 
@@ -115,9 +125,6 @@
 // WIFI_SSID / NVS settings when none of these is in range.
 // Define WIFI_NETWORKS in wifi_secrets.h (not committed), e.g.
 // #define WIFI_NETWORKS { {"HomeSSID", "password", 10}, {"Hotspot", "password", 20}, }
-#if __has_include("wifi_secrets.h")
-#include "wifi_secrets.h"
-#endif
 // WiFi transmit power (library default is WIFI_POWER_8_5dBm)
 #define WIFI_TX_POWER WIFI_POWER_19_5dBm
 // ignore networks weaker than this (dBm)
