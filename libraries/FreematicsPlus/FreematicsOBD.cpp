@@ -424,8 +424,9 @@ bool COBD::init(OBD_PROTOCOLS protocol, bool quick)
 		if (success) altInitUsed = set;
 	}
 	if (!success) return false;
-	if (!quick) {
-		// protocol in use, if the co-processor reports it
+	if (!quick && altInitCount) {
+		// protocol in use, if the co-processor reports it; only asked when
+		// alternate sets are in use, to keep the default init as it was
 		protocolName[0] = 0;
 		if (link->sendCommand("ATDP\r", buffer, sizeof(buffer), OBD_TIMEOUT_SHORT) &&
 				!strchr(buffer, '?') && !checkErrorMessage(buffer)) {

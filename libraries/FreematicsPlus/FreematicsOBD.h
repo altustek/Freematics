@@ -28,6 +28,7 @@ public:
 	// "ATSP6;ATCF7E8;ATCM7F8" (the array must outlive this object)
 	void setAltInit(const char* const* sets, byte count) { altInit = sets; altInitCount = count; altInitUsed = -1; }
 	// protocol reported by the co-processor (ATDP) after a full init, if any
+	// (only queried when alternate sets are configured)
 	char protocolName[32] = {0};
 	// reset OBD-II connection
 	void reset();
