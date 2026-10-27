@@ -10,6 +10,12 @@
 
 #include <Arduino.h>
 
+#ifdef DIAG_LOG
+// tee all Serial output into the diagnostic log buffer (FreematicsLog.h)
+#include "FreematicsLog.h"
+#define Serial DiagSerial
+#endif
+
 // non-OBD/custom PIDs (no mode number)
 #define PID_GPS_LATITUDE 0xA
 #define PID_GPS_LONGITUDE 0xB
