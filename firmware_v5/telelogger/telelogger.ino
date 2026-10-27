@@ -182,6 +182,97 @@ int32_t dataInterval = 1000;
 
 #if STORAGE != STORAGE_NONE
 int fileid = 0;
+
+#if defined(DIAG_LOG) && STORAGE == STORAGE_SD
+#define DIAG_LOG_FLUSH_INTERVAL 2000 /* ms */
+bool diagLogReady = false;
+
+// append buffered diagnostic output (everything printed to Serial) to
+// /LOGS/<fileid>.TXT, next to the trip's /DATA/<fileid>.CSV
+void flushDiagLog(bool force = false)
+{
+  static uint32_t lastFlush = 0;
+  if (!diagLogReady || !fileid) return;
+  if (!force && millis() - lastFlush < DIAG_LOG_FLUSH_INTERVAL &&
+      DiagSerial.pending() < DIAG_LOG_BUFFER_SIZE / 2) return;
+  lastFlush = millis();
+  if (!DiagSerial.pending()) return;
+  char path[24];
+  snprintf(path, sizeof(path), "/LOGS/%u.TXT", fileid);
+  File f = SD.open(path, FILE_APPEND);
+  if (!f) return;
+  char buf[256];
+  size_t n;
+  while ((n = DiagSerial.take(buf, sizeof(buf))) > 0) f.write((uint8_t*)buf, n);
+  f.close();
+}
+
+// serial console for reading the SD card without reflashing:
+//   SD LIST [dir]  -> BEGIN LIST / "<name> <size> <YYYY-mm-dd HH:MM:SS>" / END LIST
+//   SD GET <path>  -> BEGIN FILE <path> <size> / <raw bytes> / END FILE
+// Other output is held back from USB (still logged) while a command runs.
+void sdCommand(const char* cmd)
+{
+  Print& out = DiagSerial.raw();
+  if (!diagLogReady) {
+    out.print("ERR no SD card\n");
+  } else if (!strncmp(cmd, "LIST", 4)) {
+    const char* dir = cmd[4] == ' ' ? cmd + 5 : "/DATA";
+    File root = SD.open(dir);
+    if (!root || !root.isDirectory()) {
+      out.printf("ERR no %s\n", dir);
+      return;
+    }
+    out.print("BEGIN LIST\n");
+    for (File f = root.openNextFile(); f; f = root.openNextFile()) {
+      time_t t = f.getLastWrite();
+      char ts[24];
+      strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", gmtime(&t));
+      out.printf("%s %u %s\n", f.name(), (unsigned)f.size(), ts);
+      f.close();
+    }
+    out.print("END LIST\n");
+  } else if (!strncmp(cmd, "GET ", 4)) {
+    flushDiagLog(true); // so the current log is complete
+    File f = SD.open(cmd + 4, FILE_READ);
+    if (!f || f.isDirectory()) {
+      out.printf("ERR cannot open %s\n", cmd + 4);
+      return;
+    }
+    out.printf("BEGIN FILE %s %u\n", cmd + 4, (unsigned)f.size());
+    uint8_t buf[256];
+    int n;
+    while ((n = f.read(buf, sizeof(buf))) > 0) out.write(buf, n);
+    f.close();
+    out.print("\nEND FILE\n");
+  } else {
+    out.print("ERR unknown SD command\n");
+  }
+}
+
+void processSerial()
+{
+  static char line[96];
+  static uint8_t len = 0;
+  while (DiagSerial.available()) {
+    char c = DiagSerial.read();
+    if (c != '\r' && c != '\n') {
+      if (len < sizeof(line) - 1) line[len++] = c;
+      continue;
+    }
+    if (!len) continue;
+    line[len] = 0;
+    len = 0;
+    if (strncmp(line, "SD ", 3)) continue;
+    DiagSerial.mute(true);
+    sdCommand(line + 3);
+    DiagSerial.mute(false);
+  }
+}
+#else
+void flushDiagLog(bool force = false) {}
+void processSerial() {}
+#endif
 uint16_t lastSizeKB = 0;
 #endif
 
@@ -647,6 +738,11 @@ void initialize()
   }
   if (state.check(STATE_STORAGE_READY)) {
     fileid = logger.begin();
+#if defined(DIAG_LOG) && STORAGE == STORAGE_SD
+    SD.mkdir("/LOGS");
+    diagLogReady = true;
+    flushDiagLog(true);
+#endif
   }
 #endif
 
@@ -753,6 +849,7 @@ bool waitMotion(long timeout)
       serverProcess(100);
 #endif
       processBLE(100);
+      processSerial();
       // check movement: a door slam or a bump is a single spike, driving
       // off keeps the device moving for several samples
       if (motion >= MOTION_THRESHOLD * MOTION_THRESHOLD) {
@@ -940,6 +1037,8 @@ void process()
 #else
   dataInterval = dataIntervals[0];
 #endif
+  flushDiagLog();
+  processSerial();
   do {
     long t = dataInterval - (millis() - startTime);
 #if ENABLE_HTTPD
@@ -1415,6 +1514,7 @@ void standby()
   oled.clear();
 #endif
   Serial.println("STANDBY");
+  flushDiagLog(true);
   obd.enterLowPowerMode();
   uint32_t standbyStart = millis();
   standbyRadiosOn = true;
@@ -1427,6 +1527,7 @@ void standby()
   for (;;) {
     long wait = BATTERY_CHECK_INTERVAL * 1000L - (long)(millis() - lastBattCheck);
     bool moved = waitMotion(wait > 0 ? wait : 0);
+    flushDiagLog();
     if (!state.check(STATE_STANDBY)) break; // woken by command
     // with a low battery motion must not shorten the wait: each check wakes
     // the OBD co-processor
@@ -1849,7 +1950,14 @@ if (!state.check(STATE_MEMS_READY)) do {
   initialize();
 
   // initialize network and maintain connection
-  subtask.create(telemetry, "telemetry", 2, 8192);
+  // the stack needs a contiguous 8 KB block; with WiFi, BLE and HTTPD up the
+  // heap is tight, so report a failure instead of running without a network
+  if (!subtask.create(telemetry, "telemetry", 2, 8192)) {
+    Serial.printf("[MEM] telemetry task FAILED (free %u, largest block %u)\n",
+      ESP.getFreeHeap(), heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+  }
+  Serial.printf("[MEM] free %u, largest block %u\n", ESP.getFreeHeap(),
+    heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 
 #ifdef PIN_LED
   digitalWrite(PIN_LED, LOW);
