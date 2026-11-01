@@ -1206,8 +1206,13 @@ void sendStandbyReport(CStorageRAM& store, bool useGPS)
       state.set(STATE_GPS_READY);
       started = true;
     }
-    for (uint32_t t = millis(); state.check(STATE_STANDBY) && millis() - t < STANDBY_GPS_TIMEOUT * 1000UL; delay(1000)) {
-      if (processGPS(buffer)) break;
+    if (state.check(STATE_GPS_READY)) {
+      for (uint32_t t = millis(); state.check(STATE_STANDBY) && millis() - t < STANDBY_GPS_TIMEOUT * 1000UL; delay(1000)) {
+        if (processGPS(buffer)) break;
+      }
+    } else {
+      // the co-processor is asleep (ATLP): waiting would only keep the modem powered for nothing
+      Serial.println("[STBY] GNSS not started");
     }
     if (started) {
       sys.gpsEnd(true);
