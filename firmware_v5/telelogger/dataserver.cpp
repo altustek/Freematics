@@ -328,6 +328,8 @@ bool serverSetup(IPAddress& ip)
 
     WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASSWORD);
     ip = WiFi.softAPIP();
+    // without an address, binding to it would silently listen on every interface
+    if ((uint32_t)ip == 0) return false;
 
     mwInitParam(&httpParam, 80, "/spiffs");
     httpParam.pxUrlHandler = urlHandlerList;
