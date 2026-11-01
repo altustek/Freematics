@@ -241,7 +241,7 @@
 // seed the receiver at start with the last gate-accepted position kept in NVS
 // (u-blox UBX-MGA-INI-POS_LLH); unverified on this co-processor, see TODO P1-9
 #ifndef GNSS_SEED_CACHE
-#define GNSS_SEED_CACHE 0
+#define GNSS_SEED_CACHE 1
 #endif
 // position uncertainty given with the seed, metres (car may have moved while off)
 #ifndef GNSS_SEED_ACCURACY
