@@ -128,6 +128,9 @@ public:
     virtual String queryIP(const char* host);
     virtual bool getLocation(GPS_DATA** pgd);
     bool check(unsigned int timeout = 0);
+    // power the module off only if it answers AT (never toggles the power key blindly, which would
+    // switch an already-off module on); returns true if it was on
+    bool powerOffIfOn(CFreematics* device, unsigned int timeout = 500);
     char* getBuffer();
     const char* deviceName() { return m_model; }
     char IMEI[16] = {0};
