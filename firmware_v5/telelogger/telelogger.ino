@@ -1672,10 +1672,12 @@ void showSysInfo()
 
 void loadConfig()
 {
+#if !BLE_READONLY
   size_t len;
-  len = sizeof(apn);
+#endif
   apn[0] = 0;
 #if !BLE_READONLY
+  len = sizeof(apn);
   nvs_get_str(nvs, "CELL_APN", apn, &len);
 #endif
   if (!apn[0]) {
@@ -1852,7 +1854,8 @@ void processBLE(int timeout)
     n += snprintf(buf + n, bufsize - n, "ERROR");
   }
   Serial.print(" -> ");
-  Serial.println((p = strchr(buf, '\r')) ? p + 1 : buf);
+  // the password must not reach the serial console or the SD diag log
+  Serial.println(!strcmp(cmd, "WPWD?") ? "***" : (p = strchr(buf, '\r')) ? p + 1 : buf);
   if (n < bufsize - 1) {
     buf[n++] = '\r';
   } else {
