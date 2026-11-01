@@ -67,6 +67,8 @@ PID_POLLING_INFO obdData[]= {
   {PID_TIMING_ADVANCE, 2},
   {PID_COOLANT_TEMP, 3},
   {PID_INTAKE_TEMP, 3},
+  // ECU control module voltage in mV, reference to calibrate the ADC reading
+  {PID_CONTROL_MODULE_VOLTAGE, 3},
 };
 
 CBufferManager bufman;
@@ -933,6 +935,15 @@ void process()
 #endif
 #if ENABLE_OBD
   batteryVoltage = readBatteryVoltage();
+  {
+    // compare the calibrated and the raw ADC readings, for the divider ratio
+    static uint32_t lastAdcLog = 0;
+    if (sys.devType > 12 && millis() - lastAdcLog >= 60000) {
+      lastAdcLog = millis();
+      Serial.printf("[BATT] adc %.2f raw %.2f\n", batteryVoltage,
+        (float)(analogRead(A0) * 45) / 4095);
+    }
+  }
   if (batteryVoltage) {
     uint16_t v = batteryVoltage * 100;
     buffer->add(PID_BATTERY_VOLTAGE, ELEMENT_UINT16, &v, sizeof(v));

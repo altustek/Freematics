@@ -208,8 +208,8 @@ int COBD::normalizeData(byte pid, char* data)
 	case PID_ENGINE_REF_TORQUE: // Nm
 		result = getLargeValue(data);
 		break;
-	case PID_CONTROL_MODULE_VOLTAGE: // V
-		result = getLargeValue(data) / 1000;
+	case PID_CONTROL_MODULE_VOLTAGE: // mV, integer volts would lose the decimals
+		result = getLargeValue(data);
 		break;
 	case PID_ENGINE_FUEL_RATE: // L/h
 		result = getLargeValue(data) / 20;
