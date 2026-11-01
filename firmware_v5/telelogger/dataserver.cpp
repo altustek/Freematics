@@ -332,6 +332,8 @@ bool serverSetup(IPAddress& ip)
     mwInitParam(&httpParam, 80, "/spiffs");
     httpParam.pxUrlHandler = urlHandlerList;
     httpParam.maxClients = 4;
+    // listen on the soft AP only, not on networks the device joins as a station
+    httpParam.hlBindIP = (uint32_t)ip;
 
     if (mwServerStart(&httpParam)) {
         return false;
