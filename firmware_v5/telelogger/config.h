@@ -265,6 +265,27 @@
 // (engine running), checked every BATTERY_CHECK_INTERVAL.
 #define MOTION_CONFIRM_SAMPLES 2
 #define MOTION_CONFIRM_WINDOW 2000 /* ms */
+// Motion while awake (trip end, cellular retry): the accelerometer reading changed by at least
+// MOTION_VIBRATION_G between two samples, MOTION_VIBRATION_HITS times within the last
+// MOTION_VIBRATION_WINDOW samples (<= 8). Tuned on 8 recorded drives: 89% of samples at 15 km/h or more
+// fire it, the longest silent stretch is 18 samples, 13% of samples at under 2 km/h fire it.
+#ifndef MOTION_VIBRATION_G
+#define MOTION_VIBRATION_G 0.08f
+#endif
+#ifndef MOTION_VIBRATION_HITS
+#define MOTION_VIBRATION_HITS 2
+#endif
+#ifndef MOTION_VIBRATION_WINDOW
+#define MOTION_VIBRATION_WINDOW 6
+#endif
+// pause between cellular attempts (seconds): at least CELL_RETRY_MIN, at most CELL_RETRY_WAIT. Motion ends
+// the wait after CELL_RETRY_MIN. An operator may ban a module that is switched on and off too often.
+#ifndef CELL_RETRY_MIN
+#define CELL_RETRY_MIN 30
+#endif
+#ifndef CELL_RETRY_WAIT
+#define CELL_RETRY_WAIT 180
+#endif
 // engine jumpstart voltage for waking up (when MEMS unavailable) 
 #define JUMPSTART_VOLTAGE 14 /* V */
 // reset device after waking up
