@@ -279,9 +279,7 @@ int mwGetLocalFileName(HttpFilePath* hfp)
 
 	hfp->pchExt=NULL;
 	hfp->fTailSlash=0;
-	if (*s == '~') {
-		s++;
-	} else if (hfp->pchRootPath) {
+	if (hfp->pchRootPath) {
 		p+=_mwStrCopy(hfp->cFilePath,hfp->pchRootPath);
 		if (*(p-1)!=SLASH) {
 			*p=SLASH;
@@ -1752,12 +1750,6 @@ int _mwParseHttpHeader(HttpSocket* phsSocket)
 			phsSocket->request.pucTransport = p;
 		} else if (_mwStrHeadMatch(&p,"Authorization: ")) {
 			phsSocket->request.pucAuthInfo = p;
-		} else if (_mwStrHeadMatch(&p,"X-Forwarded-For: ")) {
-			int i;
-			for (i = 3; i >= 0 && *p; i--) {
-				phsSocket->ipAddr.caddr[i] = atoi(p);
-				while (*p && *p != '\r' && *(p++) != '.');
-			}
 		}
 	}
 	return 0;					//end of header
