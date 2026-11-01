@@ -20,6 +20,7 @@
 #include "config.h"
 #include "telestore.h"
 #include "teleclient.h"
+#include "gnss_gate.h"
 #if BOOT_AT_PIPE_TIMEOUT
 #include "atpipe.h"
 #endif
@@ -472,8 +473,12 @@ void processOBD(CBuffer* buffer)
 }
 #endif
 
+// rejects implausible positions (bad first fixes), see gnss_gate.h
+GnssGate gnssGate;
+
 bool initGPS()
 {
+  gnssGate.reset();
   // start GNSS receiver
   if (sys.gpsBeginExt()) {
     Serial.println("GNSS:OK(E)");
@@ -489,13 +494,10 @@ bool initGPS()
 bool processGPS(CBuffer* buffer)
 {
   static uint32_t lastGPStime = 0;
-  static float lastGPSLat = 0;
-  static float lastGPSLng = 0;
 
   if (!gd) {
     lastGPStime = 0;
-    lastGPSLat = 0;
-    lastGPSLng = 0;
+    gnssGate.reset();
   }
 #if GNSS == GNSS_STANDALONE
   if (state.check(STATE_GPS_READY)) {
@@ -528,16 +530,20 @@ bool processGPS(CBuffer* buffer)
     }
     return false;
   }
-  if ((lastGPSLat || lastGPSLng) && (abs(gd->lat - lastGPSLat) > 0.001 || abs(gd->lng - lastGPSLng) > 0.001)) {
-    // invalid coordinates data
-    lastGPSLat = 0;
-    lastGPSLng = 0;
+  float kph = gd->speed * 1.852f;
+  float obdKph = -1;
+#if ENABLE_OBD
+  // the car's own speed is the reference for GNSS speed, if fresh
+  if (state.check(STATE_OBD_READY) && obdData[0].ts && millis() - obdData[0].ts < 3000) obdKph = obdData[0].value;
+#endif
+  if (!gnssGate.accept(gd->lat, gd->lng, gd->alt, kph, obdKph, millis())) {
+    static uint8_t rejects = 0;
+    if (gnssGate.reason() != GnssGate::WARMUP && (rejects++ % 10) == 0) {
+      Serial.printf("[GNSS] rejected (%s) %.5f %.5f alt %d speed %d SATS:%d\n",
+          GnssGate::reasonText(gnssGate.reason()), gd->lat, gd->lng, (int)gd->alt, (int)kph, gd->sat);
+    }
     return false;
   }
-  lastGPSLat = gd->lat;
-  lastGPSLng = gd->lng;
-
-  float kph = gd->speed * 1.852f;
   if (kph >= 2) lastMotionTime = millis();
 
   if (buffer) {
