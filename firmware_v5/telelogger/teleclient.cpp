@@ -513,6 +513,8 @@ void TeleClientUDP::shutdown()
     return;
   }
 #endif
+  // never set up (WiFi dropped before the first cellular use): nothing to log out of or switch off
+  if (!cell.begun()) return;
   cell.end();
   Serial.println("[CELL] Deactivated");
 }

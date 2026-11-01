@@ -571,14 +571,20 @@ bool CellSIMCOM::check(unsigned int timeout)
 
 bool CellSIMCOM::powerOffIfOn(CFreematics* device, unsigned int timeout)
 {
-  if (!m_device) {
-    // begin() was never called (a WiFi-only trip): the UART is up, the module may still be powered
+  // begin() may never have run (a WiFi-only trip): borrow the UART for the check only
+  CFreematics* prev = m_device;
+  if (!prev) {
     m_device = device;
     getBuffer();
   }
-  if (!check(timeout)) return false;
-  end();
-  return true;
+  bool on = check(timeout);
+  if (on) {
+    // no xbTogglePower fallback, unlike end()
+    sendCommand(m_type == CELL_SIM7070 ? "AT+CPOWD=1\r" : "AT+CPOF\r", 1000);
+    delay(1500);
+  }
+  m_device = prev;
+  return on;
 }
 
 bool CellSIMCOM::checkSIM(const char* pin)
