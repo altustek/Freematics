@@ -198,6 +198,10 @@
 #define MAX_CONN_TIME 10000 /* ms */
 // data receiving timeout
 #define DATA_RECEIVING_TIMEOUT 5000 /* ms */
+// longest wait for the server reply to a login/event/ping over WiFi (returns as soon as it arrives)
+#ifndef WIFI_REPLY_TIMEOUT
+#define WIFI_REPLY_TIMEOUT 1500 /* ms */
+#endif
 // expected maximum server sync signal interval
 #define SERVER_SYNC_INTERVAL 120 /* seconds, 0 to disable */
 // data interval settings

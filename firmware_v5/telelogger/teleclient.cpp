@@ -266,7 +266,7 @@ bool TeleClientUDP::notify(byte event, const char* payload)
     if (wifi.connected())
     {
       data = cell.getBuffer();
-      bytesRecv = wifi.receive(data, RECV_BUF_SIZE - 1);
+      bytesRecv = wifi.receive(data, RECV_BUF_SIZE - 1, WIFI_REPLY_TIMEOUT);
       if (bytesRecv > 0) {
         data[bytesRecv] = 0;
       }
