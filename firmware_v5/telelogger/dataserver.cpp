@@ -67,20 +67,20 @@ int handlerInfo(UrlHandlerParam* param)
     struct tm timeinfo = { 0 };
     localtime_r(&now, &timeinfo);
     if (timeinfo.tm_year) {
-        bytes += snprintf(buf + bytes, bufsize - bytes, "\"rtc\":{\"date\":\"%04u-%02u-%02u\",\"time\":\"%02u:%02u:%02u\"},\n",
+        HTTP_SNPRINTF_ADD(bytes, buf, bufsize, "\"rtc\":{\"date\":\"%04u-%02u-%02u\",\"time\":\"%02u:%02u:%02u\"},\n",
         timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
         timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
     }
 
     int deviceTemp = (int)temprature_sens_read() * 165 / 255 - 40;
-    bytes += snprintf(buf + bytes, bufsize - bytes, "\"cpu\":{\"temperature\":%d,\"magnetic\":%d},\n",
+    HTTP_SNPRINTF_ADD(bytes, buf, bufsize, "\"cpu\":{\"temperature\":%d,\"magnetic\":%d},\n",
         deviceTemp, hall_sens_read());
 
 #if STORAGE == STORAGE_SPIFFS
-    bytes += snprintf(buf + bytes, bufsize - bytes, "\"spiffs\":{\"total\":%u,\"used\":%u}",
+    HTTP_SNPRINTF_ADD(bytes, buf, bufsize, "\"spiffs\":{\"total\":%u,\"used\":%u}",
         SPIFFS.totalBytes(), SPIFFS.usedBytes());
 #else
-    bytes += snprintf(buf + bytes, bufsize - bytes, "\"sd\":{\"total\":%llu,\"used\":%llu}",
+    HTTP_SNPRINTF_ADD(bytes, buf, bufsize, "\"sd\":{\"total\":%llu,\"used\":%llu}",
         SD.totalBytes(), SD.usedBytes());
 #endif
 
@@ -251,18 +251,18 @@ int handlerLogList(UrlHandlerParam* param)
                 Serial.println(" bytes");
                 unsigned int id = atoi(fn);
                 if (id) {
-                    n += snprintf(buf + n, bufsize - n, "{\"id\":%u,\"size\":%u",
+                    HTTP_SNPRINTF_ADD(n, buf, bufsize, "{\"id\":%u,\"size\":%u",
                         id, size);
                     if (id == fileid) {
-                        n += snprintf(buf + n, bufsize - n, ",\"active\":true");
+                        HTTP_SNPRINTF_ADD(n, buf, bufsize, ",\"active\":true");
                     }
-                    n += snprintf(buf + n, bufsize - n, "},");
+                    HTTP_SNPRINTF_ADD(n, buf, bufsize, "},");
                 }
             }
         }
         if (buf[n - 1] == ',') n--;
     }
-    n += snprintf(buf + n, bufsize - n, "]");
+    HTTP_SNPRINTF_ADD(n, buf, bufsize, "]");
     param->contentType=HTTPFILETYPE_JSON;
     param->contentLength = n;
     return FLAG_DATA_RAW;

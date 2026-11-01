@@ -391,23 +391,23 @@ int handlerLiveData(UrlHandlerParam* param)
     int n = snprintf(buf, bufsize, "{\"obd\":{\"vin\":\"%s\",\"battery\":%.1f,\"pid\":[", vin, batteryVoltage);
     uint32_t t = millis();
     for (int i = 0; i < sizeof(obdData) / sizeof(obdData[0]); i++) {
-        n += snprintf(buf + n, bufsize - n, "{\"pid\":%u,\"value\":%d,\"age\":%u},",
+        HTTP_SNPRINTF_ADD(n, buf, bufsize, "{\"pid\":%u,\"value\":%d,\"age\":%u},",
             0x100 | obdData[i].pid, obdData[i].value, (unsigned int)(t - obdData[i].ts));
     }
     n--;
-    n += snprintf(buf + n, bufsize - n, "]}");
+    HTTP_SNPRINTF_ADD(n, buf, bufsize, "]}");
 #if ENABLE_MEMS
     if (accCount) {
-      n += snprintf(buf + n, bufsize - n, ",\"mems\":{\"acc\":[%d,%d,%d],\"stationary\":%u}",
+      HTTP_SNPRINTF_ADD(n, buf, bufsize, ",\"mems\":{\"acc\":[%d,%d,%d],\"stationary\":%u}",
           (int)((accSum[0] / accCount - accBias[0]) * 100), (int)((accSum[1] / accCount - accBias[1]) * 100), (int)((accSum[2] / accCount - accBias[2]) * 100),
           (unsigned int)(millis() - lastMotionTime));
     }
 #endif
     if (gd && gd->ts) {
-      n += snprintf(buf + n, bufsize - n, ",\"gps\":{\"utc\":\"%s\",\"lat\":%f,\"lng\":%f,\"alt\":%f,\"speed\":%f,\"sat\":%d,\"age\":%u}",
+      HTTP_SNPRINTF_ADD(n, buf, bufsize, ",\"gps\":{\"utc\":\"%s\",\"lat\":%f,\"lng\":%f,\"alt\":%f,\"speed\":%f,\"sat\":%d,\"age\":%u}",
           isoTime, gd->lat, gd->lng, gd->alt, gd->speed, (int)gd->sat, (unsigned int)(millis() - gd->ts));
     }
-    buf[n++] = '}';
+    if (n < bufsize - 1) buf[n++] = '}';
     param->contentLength = n;
     param->contentType=HTTPFILETYPE_JSON;
     return FLAG_DATA_RAW;

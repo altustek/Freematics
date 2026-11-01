@@ -1044,6 +1044,10 @@ int _mwProcessReadSocket(HttpParam* hp, HttpSocket* phsSocket)
 		}
 
 		phsSocket->request.headerSize = (int)(headerEnd - phsSocket->buffer + 4);
+#ifdef ARDUINO
+		// keep room after the request header for the response (handlers write behind it)
+		if (phsSocket->request.headerSize > HTTP_BUFFER_SIZE - 512) return -1;
+#endif
 		if (_mwParseHttpHeader(phsSocket)) {
 			SYSLOG(LOG_INFO,"Error parsing request\n");
 			return -1;
@@ -1068,6 +1072,7 @@ int _mwProcessReadSocket(HttpParam* hp, HttpSocket* phsSocket)
 			}
 
 			phsSocket->request.pucPath = malloc(pathLen + 1);
+			if (!phsSocket->request.pucPath) return -1;
 			memcpy(phsSocket->request.pucPath, path, pathLen);
 			phsSocket->request.pucPath[pathLen] = 0;
 			SYSLOG(LOG_INFO, "[%d] Request path: %s\n", phsSocket->socket, phsSocket->request.pucPath);
@@ -1078,6 +1083,7 @@ int _mwProcessReadSocket(HttpParam* hp, HttpSocket* phsSocket)
 					if (phsSocket->request.payloadSize > MAX_POST_PAYLOAD_SIZE) phsSocket->request.payloadSize = MAX_POST_PAYLOAD_SIZE;
 					phsSocket->bufferSize = phsSocket->request.payloadSize + 1;
 					phsSocket->request.pucPayload = malloc(phsSocket->bufferSize);
+					if (!phsSocket->request.pucPayload) return -1;
 					phsSocket->pucData = phsSocket->request.pucPayload;
 					// payload length already received
 					phsSocket->contentLength -= phsSocket->request.headerSize;
