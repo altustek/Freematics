@@ -479,6 +479,36 @@ GnssGate gnssGate;
 // so the "no signal" reset must not restart it (that would be a cold start)
 static bool gpsGateHeld = false;
 
+// last position accepted by the gate, persisted in NVS to seed the receiver at the next start
+typedef struct {
+  float lat;
+  float lng;
+} GPS_CACHE;
+static GPS_CACHE gpsLastGood = {0, 0};
+static GPS_CACHE gpsStored = {0, 0};
+
+static void loadGPSCache()
+{
+  GPS_CACHE c;
+  size_t len = sizeof(c);
+  if (nvs_get_blob(nvs, "GPS_LAST", &c, &len) == ESP_OK && len == sizeof(c) &&
+      c.lat >= -90 && c.lat <= 90 && c.lng >= -180 && c.lng <= 180 && (c.lat != 0 || c.lng != 0)) {
+    gpsStored = c;
+  }
+}
+
+// write only when it moved, so flash wear stays negligible
+static void saveGPSCache(float minMoveM)
+{
+  if (!gpsLastGood.lat && !gpsLastGood.lng) return;
+  if ((gpsStored.lat || gpsStored.lng) &&
+      GnssGate::distanceM(gpsStored.lat, gpsStored.lng, gpsLastGood.lat, gpsLastGood.lng) < minMoveM) return;
+  if (nvs_set_blob(nvs, "GPS_LAST", &gpsLastGood, sizeof(gpsLastGood)) == ESP_OK && nvs_commit(nvs) == ESP_OK) {
+    gpsStored = gpsLastGood;
+    Serial.printf("[GNSS] cached %.5f %.5f\n", gpsStored.lat, gpsStored.lng);
+  }
+}
+
 bool initGPS()
 {
   gnssGate.reset();
@@ -491,6 +521,12 @@ bool initGPS()
     Serial.println("GNSS:NO");
     return false;
   }
+#if GNSS_SEED_CACHE
+  if (gpsStored.lat || gpsStored.lng) {
+    bool ok = sys.gpsSeedPosition(gpsStored.lat, gpsStored.lng, GNSS_SEED_ACCURACY);
+    Serial.printf("[GNSS] seed %.5f %.5f %s\n", gpsStored.lat, gpsStored.lng, ok ? "sent" : "FAILED");
+  }
+#endif
   return true;
 }
 
@@ -577,6 +613,9 @@ bool processGPS(CBuffer* buffer)
   Serial.print(" Course:");
   Serial.println(gd->heading);
   //Serial.println(gd->errors);
+  gpsLastGood.lat = gd->lat;
+  gpsLastGood.lng = gd->lng;
+  saveGPSCache(GNSS_CACHE_MIN_MOVE);
   return true;
 }
 
@@ -1530,6 +1569,8 @@ void standby()
   }
 #endif
 
+  // parked: keep the final position for the next start
+  saveGPSCache(100);
 #if !GNSS_ALWAYS_ON && GNSS == GNSS_STANDALONE
   if (state.check(STATE_GPS_READY)) {
     Serial.println("[GNSS] OFF");
@@ -1875,6 +1916,7 @@ void setup()
   err = nvs_open("storage", NVS_READWRITE, &nvs);
   if (err == ESP_OK) {
     loadConfig();
+    loadGPSCache();
   }
 
 #if ENABLE_OLED

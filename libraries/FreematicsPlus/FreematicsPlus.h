@@ -160,6 +160,9 @@ public:
   int gpsGetNMEA(char* buffer, int bufsize);
   // send command string to GPS
   void gpsSendCommand(const uint8_t* cmd, int len);
+  // tell the receiver roughly where it is (u-blox UBX-MGA-INI-POS_LLH) to speed up the first fix
+  // accuracyM is the radius the position is good to; call after gpsBegin()/gpsBeginExt()
+  bool gpsSeedPosition(float lat, float lng, float accuracyM, float altM = 0);
   // start xBee UART communication
   bool xbBegin(unsigned long baudrate = BEE_BAUDRATE, int pinRx = PIN_BEE_UART_RXD, int pinTx = PIN_BEE_UART_TXD);
   void xbEnd();

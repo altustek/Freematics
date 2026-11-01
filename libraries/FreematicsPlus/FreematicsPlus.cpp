@@ -731,6 +731,39 @@ void FreematicsESP32::gpsSendCommand(const uint8_t* cmd, int len)
     }
 }
 
+bool FreematicsESP32::gpsSeedPosition(float lat, float lng, float accuracyM, float altM)
+{
+    uint8_t msg[8 + 20];
+    int32_t la = (int32_t)(lat * 1e7f);
+    int32_t lo = (int32_t)(lng * 1e7f);
+    int32_t al = (int32_t)(altM * 100.0f);
+    uint32_t acc = (uint32_t)(accuracyM * 100.0f);
+    memset(msg, 0, sizeof(msg));
+    msg[0] = 0xB5; msg[1] = 0x62;
+    msg[2] = 0x13; msg[3] = 0x40; // UBX-MGA-INI
+    msg[4] = 20; msg[5] = 0;
+    msg[6] = 0x01; // type: POS_LLH, version 0, 2 reserved bytes
+    memcpy(msg + 10, &la, 4); // ESP32 is little-endian, as UBX is
+    memcpy(msg + 14, &lo, 4);
+    memcpy(msg + 18, &al, 4);
+    memcpy(msg + 22, &acc, 4);
+    uint8_t a = 0, b = 0;
+    for (int i = 2; i < 26; i++) { a += msg[i]; b += a; }
+    msg[26] = a; msg[27] = b;
+
+    if (m_flags & FLAG_GNSS_USE_LINK) {
+        if (!link) return false;
+        char buf[8 + 28 * 3 + 2];
+        int n = sprintf(buf, "ATGDS");
+        for (int i = 0; i < (int)sizeof(msg); i++) n += sprintf(buf + n, "%02X ", msg[i]);
+        buf[n - 1] = '\r';
+        char reply[32];
+        return link->sendCommand(buf, reply, sizeof(reply), 100) > 0 && strstr(reply, "OK");
+    }
+    gpsSendCommand(msg, sizeof(msg));
+    return true;
+}
+
 bool FreematicsESP32::xbBegin(unsigned long baudrate, int pinRx, int pinTx)
 {
     uart_config_t uart_config = {
