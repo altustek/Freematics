@@ -360,6 +360,7 @@ SOCKET _mwStartListening(HttpParam* hp)
 	sinAddress.sin_port = htons(hp->httpPort); // http port
 	iRc=bind(listenSocket,(struct sockaddr*)&sinAddress, sizeof(struct sockaddr_in));
 	if (iRc<0) {
+		closesocket(listenSocket);
 		return 0;
 	}
 
@@ -381,6 +382,7 @@ SOCKET _mwStartListening(HttpParam* hp)
 
     // listen on the socket for incoming calls
 	if (listen(listenSocket, hp->maxClients)) {
+		closesocket(listenSocket);
 		return 0;
 	}
 
@@ -606,8 +608,10 @@ void mwHttpLoop(HttpParam *hp, uint32_t timeout)
 		}
 
 		phsSocketCur->socket = _mwAcceptSocket(hp,&sinaddr);
-		if (phsSocketCur->socket == 0)
+		if (phsSocketCur->socket <= 0) {
+			phsSocketCur->socket = 0;
 			break;
+		}
 		phsSocketCur->ipAddr.laddr=ntohl(sinaddr.sin_addr.s_addr);
 		SYSLOG(LOG_INFO,"[%d] Client IP: %d.%d.%d.%d\n",
 			phsSocketCur->socket,
@@ -620,6 +624,13 @@ void mwHttpLoop(HttpParam *hp, uint32_t timeout)
 
 		//fill structure with data
 		_mwInitSocketData(phsSocketCur);
+		if (!phsSocketCur->buffer) {
+			// no memory for the request buffer: refuse the connection instead of reading into NULL
+			closesocket(phsSocketCur->socket);
+			phsSocketCur->socket = 0;
+			hp->stats.clientCount--;
+			break;
+		}
 		phsSocketCur->tmExpirationTime = time(NULL) + HTTP_EXPIRATION_TIME;
 
 		//update max client count
@@ -1204,6 +1215,12 @@ void _mwCloseSocket(HttpParam* hp, HttpSocket* phsSocket)
 	SYSLOG(LOG_INFO,"[%d] Socket closed, %u connections\n",phsSocket->socket, hp->stats.clientCount);
 	phsSocket->socket = 0;
 	phsSocket->reqCount=0;
+#ifdef ARDUINO
+	// do not keep a buffer for every idle slot on a heap this small
+	free(phsSocket->buffer);
+	phsSocket->buffer = 0;
+	phsSocket->pucData = 0;
+#endif
 } // end of _mwCloseSocket
 
 int _mwStrCopy(char *dest, const char *src)

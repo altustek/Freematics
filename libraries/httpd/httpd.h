@@ -156,7 +156,8 @@ typedef struct {
 #define MAX_POST_PAYLOAD_SIZE (128*1024 /*bytes*/)
 #define HTTP_MAX_CLIENTS_DEFAULT 32
 #else
-#define HTTP_BUFFER_SIZE (16*1024 /*bytes*/)
+// per client; the heap of the logger has a largest free block of about 4.6 KB, so 16 KB never fits
+#define HTTP_BUFFER_SIZE (2*1024 /*bytes*/)
 #define MAX_POST_PAYLOAD_SIZE (16*1024 /*bytes*/)
 #define HTTP_MAX_CLIENTS_DEFAULT 16
 #endif
