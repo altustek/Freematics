@@ -932,11 +932,7 @@ void process()
   }
 #endif
 #if ENABLE_OBD
-  if (sys.devType > 12) {
-    batteryVoltage = (float)(analogRead(A0) * 45) / 4095;
-  } else {
-    batteryVoltage = obd.getVoltage();
-  }
+  batteryVoltage = readBatteryVoltage();
   if (batteryVoltage) {
     uint16_t v = batteryVoltage * 100;
     buffer->add(PID_BATTERY_VOLTAGE, ELEMENT_UINT16, &v, sizeof(v));
@@ -1474,6 +1470,17 @@ void standbyRadios(uint32_t standbyStart)
 #endif
 }
 
+// vehicle battery voltage, one source for working mode, standby and BLE.
+// devType > 12 has the battery on A0 behind a divider (45 V full scale at
+// 3.3 V is an assumption, to be verified against the ECU voltage); the ADC
+// path never touches the co-processor, so it also works in standby, where
+// ATRV fails once the co-processor sleeps. Older boards ask the co-processor.
+float readBatteryVoltage()
+{
+  if (sys.devType > 12) return analogReadMilliVolts(A0) * 45.0f / 3300;
+  return obd.getVoltage();
+}
+
 // update the low battery flag from a vehicle battery voltage reading
 void checkBattery(float v)
 {
@@ -1533,13 +1540,15 @@ void standby()
     // the OBD co-processor
     bool due = (long)(millis() - lastBattCheck) >= BATTERY_CHECK_INTERVAL * 1000L;
     if (!due && (lowBattery || !moved)) continue;
-    if (linkBusy) {
-      // standby report is using the link: check the battery once it is done
+    if (sys.devType <= 12 && linkBusy) {
+      // standby report is using the link (needed for ATRV only): check the
+      // battery once it is done
       if (moved && !lowBattery) break;
       continue;
     }
     lastBattCheck = millis();
-    float v = obd.getVoltage();
+    float v = readBatteryVoltage();
+    Serial.printf("[BATT] %.2fV\n", v);
     checkBattery(v);
     if (v >= MIN_VEHICLE_VOLTAGE) {
       if (v < CHARGING_VOLTAGE) {
@@ -1559,12 +1568,13 @@ void standby()
   float v;
   do {
     delay(5000);
-    if (linkBusy) {
-      // standby report is using the link
+    if (sys.devType <= 12 && linkBusy) {
+      // standby report is using the link (needed for ATRV only)
       v = 0;
       continue;
     }
-    v = obd.getVoltage();
+    v = readBatteryVoltage();
+    Serial.printf("[BATT] %.2fV\n", v);
     checkBattery(v);
     standbyRadios(standbyStart);
   } while (v < JUMPSTART_VOLTAGE);
@@ -1688,7 +1698,7 @@ void processBLE(int timeout)
   if (!strcmp(cmd, "UPTIME") || !strcmp(cmd, "TICK")) {
     n += snprintf(buf + n, bufsize - n, "%lu", millis());
   } else if (!strcmp(cmd, "BATT")) {
-    n += snprintf(buf + n, bufsize - n, "%.2f", (float)(analogRead(A0) * 42) / 4095);
+    n += snprintf(buf + n, bufsize - n, "%.2f", readBatteryVoltage());
   } else if (!strcmp(cmd, "RESET")) {
 #if STORAGE
     logger.end();
