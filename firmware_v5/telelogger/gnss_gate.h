@@ -132,6 +132,7 @@ private:
   bool continuous(float lat, float lng, float kph, uint32_t nowMs) const
   {
     float dt = (uint32_t)(nowMs - m_ms) / 1000.0f;
+    if (dt < 1.0f) dt = 1.0f; // samples are processed back to back, the fixes are about a second apart
     float fast = kph > m_kph ? kph : m_kph;
     return distanceM(m_lat, m_lng, lat, lng) <= fast / 3.6f * dt * GNSS_GATE_SPEED_FACTOR + GNSS_GATE_MARGIN_M;
   }

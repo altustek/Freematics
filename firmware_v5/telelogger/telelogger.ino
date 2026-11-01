@@ -475,6 +475,9 @@ void processOBD(CBuffer* buffer)
 
 // rejects implausible positions (bad first fixes), see gnss_gate.h
 GnssGate gnssGate;
+// set when the receiver delivered a position that the gate then held back: the receiver is alive,
+// so the "no signal" reset must not restart it (that would be a cold start)
+static bool gpsGateHeld = false;
 
 bool initGPS()
 {
@@ -512,6 +515,8 @@ bool processGPS(CBuffer* buffer)
     }
 #endif
   if (!gd || lastGPStime == gd->time) return false;
+  // the same fix must not reach the gate twice (it would count as a second consistent fix)
+  lastGPStime = gd->time;
   if (gd->date) {
     // generate ISO time string
     char *p = isoTime + sprintf(isoTime, "%04u-%02u-%02uT%02u:%02u:%02u",
@@ -534,10 +539,11 @@ bool processGPS(CBuffer* buffer)
   float obdKph = -1;
 #if ENABLE_OBD
   // the car's own speed is the reference for GNSS speed, if fresh
-  if (state.check(STATE_OBD_READY) && obdData[0].ts && millis() - obdData[0].ts < 3000) obdKph = obdData[0].value;
+  if (state.check(STATE_OBD_READY) && obdData[0].ts && millis() - obdData[0].ts < 1500) obdKph = obdData[0].value;
 #endif
   if (!gnssGate.accept(gd->lat, gd->lng, gd->alt, kph, obdKph, millis())) {
-    static uint8_t rejects = 0;
+    gpsGateHeld = true;
+    static uint16_t rejects = 0;
     if (gnssGate.reason() != GnssGate::WARMUP && (rejects++ % 10) == 0) {
       Serial.printf("[GNSS] rejected (%s) %.5f %.5f alt %d speed %d SATS:%d\n",
           GnssGate::reasonText(gnssGate.reason()), gd->lat, gd->lng, (int)gd->alt, (int)kph, gd->sat);
@@ -571,7 +577,6 @@ bool processGPS(CBuffer* buffer)
   Serial.print(" Course:");
   Serial.println(gd->heading);
   //Serial.println(gd->errors);
-  lastGPStime = gd->time;
   return true;
 }
 
@@ -982,6 +987,9 @@ void process()
   if (success) {
     lastGPStick = millis();
     state.set(STATE_GPS_ONLINE);
+  } else if (gpsGateHeld) {
+    gpsGateHeld = false;
+    lastGPStick = millis();
   } else {
     if (millis() - lastGPStick > GNSS_RESET_TIMEOUT * 1000) {
       sys.gpsEnd();
