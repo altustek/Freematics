@@ -87,14 +87,21 @@ uint16_t getFlashSize(); /* KB */
 class Task
 {
 public:
+  /* allocate the stack (bytes) and TCB for a later create() early, before the
+     heap fragments; create() then uses xTaskCreateStatic with it */
+  bool reserve(int stacksize);
   bool create(void (*task)(void*), const char* name, int priority = 0, int stacksize = 1024);
   void destroy();
   void suspend();
   void resume();
   bool running();
   void sleep(uint32_t ms);
+  uint32_t stackFree(); /* bytes never used so far, 0 if no task */
 private:
   TaskHandle_t xHandle;
+  uint8_t* stack = 0;
+  int stackSize = 0;
+  StaticTask_t tcb;
 };
 
 class Mutex

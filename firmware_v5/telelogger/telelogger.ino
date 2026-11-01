@@ -73,6 +73,7 @@ PID_POLLING_INFO obdData[]= {
 
 CBufferManager bufman;
 Task subtask;
+#define TELEMETRY_STACK_SIZE 8192
 
 #if ENABLE_MEMS
 float accBias[3] = {0}; // calibrated reference accelerometer data
@@ -1842,6 +1843,10 @@ void processBLE(int timeout)
 
 void setup()
 {
+  // reserve the telemetry task stack before anything fragments the heap
+  if (!subtask.reserve(TELEMETRY_STACK_SIZE)) {
+    Serial.printf("[MEM] telemetry stack reserve FAILED (free %u)\n", ESP.getFreeHeap());
+  }
   delay(500);
 
   // Initialize NVS
@@ -1971,9 +1976,9 @@ if (!state.check(STATE_MEMS_READY)) do {
   initialize();
 
   // initialize network and maintain connection
-  // the stack needs a contiguous 8 KB block; with WiFi, BLE and HTTPD up the
-  // heap is tight, so report a failure instead of running without a network
-  if (!subtask.create(telemetry, "telemetry", 2, 8192)) {
+  // the stack was reserved at the top of setup(): by now WiFi, BLE and HTTPD
+  // have fragmented the heap too much for an 8 KB block
+  if (!subtask.create(telemetry, "telemetry", 2, TELEMETRY_STACK_SIZE)) {
     Serial.printf("[MEM] telemetry task FAILED (free %u, largest block %u)\n",
       ESP.getFreeHeap(), heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
   }
@@ -1987,6 +1992,13 @@ if (!state.check(STATE_MEMS_READY)) do {
 
 void loop()
 {
+  // peak use of the telemetry stack, to know how far it can shrink
+  static uint32_t lastStackLog = 0;
+  if (millis() - lastStackLog >= 600000) {
+    lastStackLog = millis();
+    Serial.printf("[MEM] telemetry stack free %u, heap free %u\n", subtask.stackFree(), ESP.getFreeHeap());
+  }
+
   // error handling
   if (!state.check(STATE_WORKING)) {
     standby();

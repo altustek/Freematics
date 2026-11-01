@@ -14,6 +14,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
+#include "esp_heap_caps.h"
 #include "esp_pm.h"
 #include "esp_task_wdt.h"
 #include "nvs_flash.h"
@@ -178,12 +179,31 @@ int readChipHallSensor()
     return 0; // FIXME
 }
 
+bool Task::reserve(int stacksize)
+{
+    if (stack) return stackSize >= stacksize;
+    /* the TCB lives in this object; the stack must be internal RAM */
+    stack = (uint8_t*)heap_caps_malloc(stacksize, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    stackSize = stack ? stacksize : 0;
+    return stack != 0;
+}
+
 bool Task::create(void (*task)(void*), const char* name, int priority, int stacksize)
 {
     if (xHandle) return false;
+    if (stack && stackSize >= stacksize) {
+        /* on ESP-IDF the stack depth is in bytes (StackType_t is uint8_t) */
+        xHandle = xTaskCreateStatic(task, name, stackSize, (void*)this, priority, stack, &tcb);
+        return xHandle != 0;
+    }
     /* Create the task, storing the handle. */
     BaseType_t xReturned = xTaskCreate(task, name, stacksize, (void*)this, priority, &xHandle);
     return xReturned == pdPASS;
+}
+
+uint32_t Task::stackFree()
+{
+    return xHandle ? uxTaskGetStackHighWaterMark(xHandle) : 0;
 }
 
 void Task::destroy()
