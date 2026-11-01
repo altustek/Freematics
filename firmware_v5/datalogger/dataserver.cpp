@@ -326,6 +326,11 @@ void obtainTime()
 void serverProcess(int timeout)
 {
 #if ENABLE_HTTPD
+    // the server may have failed to start (no memory for the client table)
+    if (!httpParam.hsSocketQueue) {
+        if (timeout > 0) delay(timeout);
+        return;
+    }
     mwHttpLoop(&httpParam, timeout);
 #endif
 }

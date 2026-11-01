@@ -345,6 +345,7 @@ bool serverSetup(IPAddress& ip)
     httpParam.hlBindIP = (uint32_t)ip;
 
     if (mwServerStart(&httpParam)) {
+        Serial.println("[HTTPD] start failed, retrying with 2 clients");
         // heap is scarce and fragmented: retry with a smaller client table
         httpParam.maxClients = 2;
         if (mwServerStart(&httpParam)) {
