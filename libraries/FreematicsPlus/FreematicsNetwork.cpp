@@ -639,6 +639,8 @@ String CellSIMCOM::queryIP(const char* host)
 
 bool CellSIMCOM::sendCommand(const char* cmd, unsigned int timeout, const char* expected)
 {
+  // begin() never ran (e.g. WiFi-only run whose link dropped): there is no UART to talk to
+  if (!m_device) return false;
   if (cmd) {
     m_device->xbWrite(cmd);
     delay(10);
@@ -747,6 +749,7 @@ char* CellSIMCOM::getBuffer()
 
 bool CellUDP::open(const char* host, uint16_t port)
 {
+  if (!m_device) return false;
   if (host) {
     udpIP = queryIP(host);
     if (!udpIP.length()) {
@@ -776,6 +779,7 @@ bool CellUDP::open(const char* host, uint16_t port)
 
 bool CellUDP::close()
 {
+  if (!m_device) return false;
   if (m_type == CELL_SIM7070) {
     sendCommand("AT+CACLOSE=0\r");
     return sendCommand("AT+CNACT=0,0\r");
@@ -786,6 +790,7 @@ bool CellUDP::close()
 
 bool CellUDP::send(const char* data, unsigned int len)
 {
+  if (!m_device) return false;
   if (m_type == CELL_SIM7070) {
     sendCommand("AT+CASTATE?\r");
     sprintf(m_buffer, "AT+CASEND=0,%u\r", len);
