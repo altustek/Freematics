@@ -1732,19 +1732,25 @@ void showSysInfo()
 
 void loadConfig()
 {
+#if !BLE_READONLY
   size_t len;
-  len = sizeof(apn);
+#endif
   apn[0] = 0;
+#if !BLE_READONLY
+  len = sizeof(apn);
   nvs_get_str(nvs, "CELL_APN", apn, &len);
+#endif
   if (!apn[0]) {
     strcpy(apn, CELL_APN);
   }
 
 #if ENABLE_WIFI
+#if !BLE_READONLY
   len = sizeof(wifiSSID);
   nvs_get_str(nvs, "WIFI_SSID", wifiSSID, &len);
   len = sizeof(wifiPassword);
   nvs_get_str(nvs, "WIFI_PWD", wifiPassword, &len);
+#endif
 #endif
 }
 
@@ -1766,11 +1772,21 @@ void processBLE(int timeout)
   int n = 0;
   if (echo) n += snprintf(buf + n, bufsize - n, "%s\r", cmd);
   Serial.print("[BLE] ");
-  Serial.print(cmd);
+  {
+    // never log the value of a setting (WiFi password)
+    const char* eq = strchr(cmd, '=');
+    if (eq) {
+      Serial.write((const uint8_t*)cmd, eq - cmd + 1);
+      Serial.print("***");
+    } else {
+      Serial.print(cmd);
+    }
+  }
   if (!strcmp(cmd, "UPTIME") || !strcmp(cmd, "TICK")) {
     n += snprintf(buf + n, bufsize - n, "%lu", millis());
   } else if (!strcmp(cmd, "BATT")) {
     n += snprintf(buf + n, bufsize - n, "%.2f", readBatteryVoltage());
+#if !BLE_READONLY
   } else if (!strcmp(cmd, "RESET")) {
 #if STORAGE
     logger.end();
@@ -1784,13 +1800,16 @@ void processBLE(int timeout)
   } else if (!strcmp(cmd, "ON")) {
     state.clear(STATE_STANDBY);
     n += snprintf(buf + n, bufsize - n, "OK");
+#endif
   } else if (!strcmp(cmd, "ON?")) {
     n += snprintf(buf + n, bufsize - n, "%u", state.check(STATE_STANDBY) ? 0 : 1);
   } else if (!strcmp(cmd, "APN?")) {
     n += snprintf(buf + n, bufsize - n, "%s", *apn ? apn : "DEFAULT");
+#if !BLE_READONLY
   } else if (!strncmp(cmd, "APN=", 4)) {
     n += snprintf(buf + n, bufsize - n, nvs_set_str(nvs, "CELL_APN", strcmp(cmd + 4, "DEFAULT") ? cmd + 4 : "") == ESP_OK ? "OK" : "ERR");
     loadConfig();
+#endif
   } else if (!strcmp(cmd, "NET_OP")) {
     if (state.check(STATE_WIFI_CONNECTED)) {
 #if ENABLE_WIFI
@@ -1815,6 +1834,7 @@ void processBLE(int timeout)
 #if ENABLE_WIFI
   } else if (!strcmp(cmd, "SSID?")) {
     n += snprintf(buf + n, bufsize - n, "%s", wifiSSID[0] ? wifiSSID : "-");
+#if !BLE_READONLY
   } else if (!strncmp(cmd, "SSID=", 5)) {
     const char* p = cmd + 5;
     n += snprintf(buf + n, bufsize - n, nvs_set_str(nvs, "WIFI_SSID", strcmp(p, "-") ? p : "") == ESP_OK ? "OK" : "ERR");
@@ -1825,6 +1845,7 @@ void processBLE(int timeout)
     const char* p = cmd + 5;
     n += snprintf(buf + n, bufsize - n, nvs_set_str(nvs, "WIFI_PWD", strcmp(p, "-") ? p : "") == ESP_OK ? "OK" : "ERR");
     loadConfig();
+#endif
 #else
   } else if (!strcmp(cmd, "SSID?") || !strcmp(cmd, "WPWD?")) {
     n += snprintf(buf + n, bufsize - n, "-");
@@ -1863,12 +1884,17 @@ void processBLE(int timeout)
       }
     }
     if (pid) {
+#if BLE_READONLY
+      // never read the OBD link from the BLE handler: it can interleave with a read in progress
+      n += snprintf(buf + n, bufsize - n, "N/A");
+#else
       int value;
       if (!linkBusy && obd.readPID(pid, value)) {
         n += snprintf(buf + n, bufsize - n, "%d", value);
       } else {
         n += snprintf(buf + n, bufsize - n, "N/A");
       }
+#endif
     }
   } else if (!strcmp(cmd, "VIN")) {
     n += snprintf(buf + n, bufsize - n, "%s", vin[0] ? vin : "N/A");
@@ -1888,7 +1914,8 @@ void processBLE(int timeout)
     n += snprintf(buf + n, bufsize - n, "ERROR");
   }
   Serial.print(" -> ");
-  Serial.println((p = strchr(buf, '\r')) ? p + 1 : buf);
+  // the password must not reach the serial console or the SD diag log
+  Serial.println(!strcmp(cmd, "WPWD?") ? "***" : (p = strchr(buf, '\r')) ? p + 1 : buf);
   if (n < bufsize - 1) {
     buf[n++] = '\r';
   } else {
