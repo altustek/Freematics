@@ -256,7 +256,8 @@ bool TeleClientUDP::notify(byte event, const char* payload)
     else
 #endif
     {
-      if (!cell.send(netbuf.buffer(), netbuf.length())) break;
+      // the modem was never set up (WiFi dropped on a WiFi-only run): nothing to send with
+      if (!cell.begun() || !cell.send(netbuf.buffer(), netbuf.length())) break;
     }
     if (event == EVENT_ACK) return true; // no reply for ACK
     char *data = 0;
@@ -403,7 +404,7 @@ bool TeleClientUDP::ping()
     else
 #endif
     {
-      success = cell.open(SERVER_HOST, SERVER_PORT);
+      success = cell.begun() && cell.open(SERVER_HOST, SERVER_PORT);
     }
     if (success) {
       if ((success = notify(EVENT_PING))) break;
@@ -442,6 +443,7 @@ bool TeleClientUDP::transmit(const char* packetBuffer, unsigned int packetSize)
 #endif
 
   // transmit data via cellular
+  if (!cell.begun()) return false;
   if (++packets >= 64) {
     cell.close();
     cell.open(0, 0);
@@ -513,8 +515,8 @@ void TeleClientUDP::shutdown()
     return;
   }
 #endif
-  // never set up (WiFi dropped before the first cellular use): nothing to log out of or switch off
-  if (!cell.begun()) return;
+  // never set up, or already off (end() would press the power key and switch it on)
+  if (!cell.begun() || !cell.check(500)) return;
   cell.end();
   Serial.println("[CELL] Deactivated");
 }
@@ -690,6 +692,7 @@ void TeleClientHTTP::shutdown()
     return;
   }
 #endif
+  if (!cell.begun() || !cell.check(500)) return;
   cell.close();
   cell.end();
   Serial.println("[CELL] Deactivated");
