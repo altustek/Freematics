@@ -302,6 +302,11 @@
 #ifndef ENABLE_BLE
 #define ENABLE_BLE 1
 #endif
+// BLE has no pairing or authentication: with 1 the command set is read-only (no OFF/ON/RESET,
+// no APN=/SSID=/WPWD=/WPWD?, no OBD reads) and settings stored in NVS by earlier firmware are ignored
+#ifndef BLE_READONLY
+#define BLE_READONLY 1
+#endif
 
 
 #endif // CONFIG_H_INCLUDED
