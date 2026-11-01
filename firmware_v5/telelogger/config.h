@@ -234,6 +234,19 @@
 #endif
 // keeping GNSS power on during standby 
 #define GNSS_ALWAYS_ON 0
+// seed the receiver at start with the last gate-accepted position kept in NVS
+// (u-blox UBX-MGA-INI-POS_LLH); unverified on this co-processor, see TODO P1-9
+#ifndef GNSS_SEED_CACHE
+#define GNSS_SEED_CACHE 0
+#endif
+// position uncertainty given with the seed, metres (car may have moved while off)
+#ifndef GNSS_SEED_ACCURACY
+#define GNSS_SEED_ACCURACY 5000
+#endif
+// store a new cached position when it is this far from the stored one, metres
+#ifndef GNSS_CACHE_MIN_MOVE
+#define GNSS_CACHE_MIN_MOVE 2000
+#endif
 // GNSS reset timeout while no signal
 #define GNSS_RESET_TIMEOUT 300 /* seconds */
 
