@@ -84,6 +84,9 @@ float gyr[3] = {0};
 float mag[3] = {0};
 uint8_t accCount = 0;
 #endif
+// millis() of the last vibration seen by processMEMS(); the network task compares it with a copy to notice
+// that the vehicle started moving (written by the main task, 32-bit so a read is atomic)
+volatile uint32_t memsMotionTime = 0;
 int deviceTemp = 0; // degC, for the cooling-down check
 int deviceTempX10 = 0; // 0.1 degC, as PID_DEVICE_TEMP is sent with TEMP_TENTHS
 
@@ -285,6 +288,7 @@ byte ledMode = 0;
 bool serverSetup(IPAddress& ip);
 void serverProcess(int timeout);
 void processMEMS(CBuffer* buffer);
+float readBatteryVoltage();
 bool processGPS(CBuffer* buffer);
 void processBLE(int timeout);
 
@@ -659,6 +663,23 @@ void processMEMS(CBuffer* buffer)
       value[1] = accSum[1] / accCount - accBias[1];
       value[2] = accSum[2] / accCount - accBias[2];
       buffer->add(PID_ACC, ELEMENT_FLOAT_D2, value, sizeof(value), 3);
+      // vibration: how much the reading changed since the previous sample. Independent of how the unit is
+      // mounted and of the bias taken at boot, and a car at constant speed still shakes. MOTION_VIBRATION_HITS
+      // hits within the last MOTION_VIBRATION_WINDOW samples count as motion, so a single bump does not.
+      static float lastValue[3];
+      static bool haveLast = false;
+      static uint8_t hitHistory = 0;
+      if (haveLast) {
+        float d = 0;
+        for (byte i = 0; i < 3; i++) d += (value[i] - lastValue[i]) * (value[i] - lastValue[i]);
+        hitHistory = (hitHistory << 1) | (d >= MOTION_VIBRATION_G * MOTION_VIBRATION_G);
+        if (__builtin_popcount(hitHistory & ((1 << MOTION_VIBRATION_WINDOW) - 1)) >= MOTION_VIBRATION_HITS) {
+          lastMotionTime = millis(); // keeps the trip alive while OBD and GNSS have nothing yet
+          memsMotionTime = lastMotionTime;
+        }
+      }
+      memcpy(lastValue, value, sizeof(lastValue));
+      haveLast = true;
 /*
       Serial.print("[ACC] ");
       Serial.print(value[0]);
@@ -1268,6 +1289,34 @@ void sendStandbyReport(CStorageRAM& store, bool useGPS)
 /*******************************************************************************
   Initializing network, maintaining connection and doing transmissions
 *******************************************************************************/
+// Pause between cellular attempts: switching the module on and off too often can get it banned by the
+// operator, so there is a minimum gap, but the wait is never blind. It ends early when the vehicle starts
+// moving (once CELL_RETRY_MIN has passed), when a known WiFi connects, and when the trip ends.
+static void cellRetryWait()
+{
+  uint32_t start = millis();
+  uint32_t seenMotion = memsMotionTime;
+  while (state.check(STATE_WORKING)) {
+    uint32_t waited = millis() - start;
+    if (waited >= 1000UL * CELL_RETRY_WAIT) break;
+    if (waited >= 1000UL * CELL_RETRY_MIN && memsMotionTime != seenMotion) {
+      Serial.println("[CELL] Motion, retrying now");
+      break;
+    }
+#if ENABLE_WIFI
+    // WiFi is cheaper than the modem: keep looking for it (selectWifi() rate-limits its scans)
+    if (!state.check(STATE_WIFI_CONNECTED)) {
+      if (selectWifi()) {
+        joinWifi();
+        teleClient.wifi.setup();
+      }
+      if (curSSID[0] && teleClient.wifi.connected()) break;
+    }
+#endif
+    delay(250);
+  }
+}
+
 void telemetry(void* inst)
 {
   uint32_t lastRssiTime = 0;
@@ -1400,7 +1449,7 @@ void telemetry(void* inst)
           state.clear(STATE_NET_READY | STATE_CELL_CONNECTED);
           Serial.println("[CELL] Deactivated");
           // avoid turning on/off cellular module too frequently to avoid operator banning
-          delay(60000 * 3);
+          cellRetryWait();
           break;
         }
         Serial.println("[CELL] In service");
