@@ -313,8 +313,15 @@ void obtainTime()
     sntp_init();
 }
 
+static bool serverRunning = false;
+
 void serverProcess(int timeout)
 {
+    if (!serverRunning) {
+        // the server could not start (no memory for the client table): just wait
+        if (timeout > 0) delay(timeout);
+        return;
+    }
     mwHttpLoop(&httpParam, timeout);
 }
 
@@ -338,8 +345,14 @@ bool serverSetup(IPAddress& ip)
     httpParam.hlBindIP = (uint32_t)ip;
 
     if (mwServerStart(&httpParam)) {
-        return false;
+        // heap is scarce and fragmented: retry with a smaller client table
+        httpParam.maxClients = 2;
+        if (mwServerStart(&httpParam)) {
+            Serial.printf("[HTTPD] start failed (free %u, largest %u)\n", ESP.getFreeHeap(), heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+            return false;
+        }
     }
+    serverRunning = true;
 
 #if NET_DEVICE == NET_WIFI
     obtainTime();

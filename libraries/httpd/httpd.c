@@ -245,6 +245,12 @@ int mwServerStart(HttpParam* hp)
 	}
 
 	hp->hsSocketQueue = calloc(hp->maxClients, sizeof(HttpSocket));
+	if (!hp->hsSocketQueue) {
+		// heap too fragmented for the client table: do not run with a NULL queue
+		closesocket(hp->listenSocket);
+		hp->listenSocket = 0;
+		return -1;
+	}
 	hp->bKillWebserver=FALSE;
 	hp->bWebserverRunning=TRUE;
 	return 0;
