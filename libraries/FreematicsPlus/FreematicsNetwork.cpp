@@ -569,6 +569,24 @@ bool CellSIMCOM::check(unsigned int timeout)
   return false;
 }
 
+bool CellSIMCOM::powerOffIfOn(CFreematics* device, unsigned int timeout)
+{
+  // begin() may never have run (a WiFi-only trip): borrow the UART for the check only
+  CFreematics* prev = m_device;
+  if (!prev) {
+    m_device = device;
+    getBuffer();
+  }
+  bool on = check(timeout);
+  if (on) {
+    // no xbTogglePower fallback, unlike end()
+    sendCommand(m_type == CELL_SIM7070 ? "AT+CPOWD=1\r" : "AT+CPOF\r", 1000);
+    delay(1500);
+  }
+  m_device = prev;
+  return on;
+}
+
 bool CellSIMCOM::checkSIM(const char* pin)
 {
   bool success;
@@ -621,6 +639,8 @@ String CellSIMCOM::queryIP(const char* host)
 
 bool CellSIMCOM::sendCommand(const char* cmd, unsigned int timeout, const char* expected)
 {
+  // begin() never ran (e.g. WiFi-only run whose link dropped): there is no UART to talk to
+  if (!m_device) return false;
   if (cmd) {
     m_device->xbWrite(cmd);
     delay(10);
@@ -729,6 +749,7 @@ char* CellSIMCOM::getBuffer()
 
 bool CellUDP::open(const char* host, uint16_t port)
 {
+  if (!m_device) return false;
   if (host) {
     udpIP = queryIP(host);
     if (!udpIP.length()) {
@@ -758,6 +779,7 @@ bool CellUDP::open(const char* host, uint16_t port)
 
 bool CellUDP::close()
 {
+  if (!m_device) return false;
   if (m_type == CELL_SIM7070) {
     sendCommand("AT+CACLOSE=0\r");
     return sendCommand("AT+CNACT=0,0\r");
@@ -768,6 +790,7 @@ bool CellUDP::close()
 
 bool CellUDP::send(const char* data, unsigned int len)
 {
+  if (!m_device) return false;
   if (m_type == CELL_SIM7070) {
     sendCommand("AT+CASTATE?\r");
     sprintf(m_buffer, "AT+CASEND=0,%u\r", len);

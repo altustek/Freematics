@@ -1191,6 +1191,13 @@ bool initCell(bool quick = false)
 // open): position if GNSS gets a fix within STANDBY_GPS_TIMEOUT, battery
 // voltage, temperature and the ignition-off markers. Without a fix Traccar
 // keeps the last known position.
+// the SIM7600 is powered at boot and is never switched off on a WiFi trip or WiFi standby ping,
+// so it idles registered while parked; switch it off if it is on
+static void modemOffIfOn()
+{
+  Serial.println(teleClient.cell.powerOffIfOn(&sys) ? "[CELL] modem was on, now off" : "[CELL] modem already off");
+}
+
 void sendStandbyReport(CStorageRAM& store, bool useGPS)
 {
   CBuffer* buffer = bufman.getFree();
@@ -1280,6 +1287,8 @@ void telemetry(void* inst)
 
   for (;;) {
     if (state.check(STATE_STANDBY)) {
+      // a cellular session is ended by shutdown(); otherwise the modem (powered at boot) may still idle
+      bool cellUsed = state.check(STATE_CELL_CONNECTED);
       if (state.check(STATE_CELL_CONNECTED) || state.check(STATE_WIFI_CONNECTED)) {
         teleClient.shutdown();
         netop = "";
@@ -1287,6 +1296,7 @@ void telemetry(void* inst)
         rssi = 0;
       }
       state.clear(STATE_NET_READY | STATE_CELL_CONNECTED | STATE_WIFI_CONNECTED);
+      if (!cellUsed) modemOffIfOn();
       teleClient.reset();
       bufman.purge();
 
@@ -1308,6 +1318,7 @@ void telemetry(void* inst)
       if (state.check(STATE_STANDBY)) {
         // start ping
         bool pinged = false;
+        bool viaWifi = false;
 #if ENABLE_WIFI
         if (selectWifi()) {
           Serial.print("[WIFI] Joining SSID:");
@@ -1316,6 +1327,7 @@ void telemetry(void* inst)
         }
         if (teleClient.wifi.setup()) {
           Serial.println("[WIFI] Ping...");
+          viaWifi = true;
           pinged = teleClient.ping();
         }
         else
@@ -1331,6 +1343,7 @@ void telemetry(void* inst)
           if (lowBattery) teleClient.notify(EVENT_LOW_BATTERY);
         }
         teleClient.shutdown();
+        if (viaWifi) modemOffIfOn();
 #if ENABLE_WIFI && RESET_AFTER_WAKEUP
         // radio back off until the next ping (see radiosOff), but keep the
         // HTTPD soft AP during the standby grace period
