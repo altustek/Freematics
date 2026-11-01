@@ -281,10 +281,13 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
                     }
                     memcpy(spp_cmd_buff,p_data->write.value,p_data->write.len);
                     spp_cmd_buff[p_data->write.len] = 0;
-                    if (xQueueSend(cmd_cmd_queue,&spp_cmd_buff,0) == errQUEUE_FULL) {
-                        char *temp;
-                        xQueueReceive(cmd_cmd_queue, &temp, 0);
-                        xQueueSend(cmd_cmd_queue,&spp_cmd_buff,0);
+                    if (cmd_cmd_queue == NULL) {
+                        free(spp_cmd_buff);
+                    } else if (xQueueSend(cmd_cmd_queue,&spp_cmd_buff,0) == errQUEUE_FULL) {
+                        // queue full: drop the oldest command, then queue the new one
+                        char *temp = NULL;
+                        if (xQueueReceive(cmd_cmd_queue, &temp, 0) == pdTRUE) free(temp);
+                        if (xQueueSend(cmd_cmd_queue,&spp_cmd_buff,0) != pdTRUE) free(spp_cmd_buff);
                     }
                 }else if(res == SPP_IDX_SPP_DATA_NTF_CFG){
                     if((p_data->write.len == 2)&&(p_data->write.value[0] == 0x01)&&(p_data->write.value[1] == 0x00)){
