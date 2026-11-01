@@ -1142,7 +1142,7 @@ bool initCell(bool quick = false)
 // so it idles registered while parked; switch it off if it is on
 static void modemOffIfOn()
 {
-  if (teleClient.cell.powerOffIfOn(&sys)) Serial.println("[CELL] modem off");
+  Serial.println(teleClient.cell.powerOffIfOn(&sys) ? "[CELL] modem was on, now off" : "[CELL] modem already off");
 }
 
 void sendStandbyReport(CStorageRAM& store, bool useGPS)
