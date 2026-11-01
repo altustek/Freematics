@@ -288,6 +288,7 @@ byte ledMode = 0;
 bool serverSetup(IPAddress& ip);
 void serverProcess(int timeout);
 void processMEMS(CBuffer* buffer);
+float readBatteryVoltage();
 bool processGPS(CBuffer* buffer);
 void processBLE(int timeout);
 
