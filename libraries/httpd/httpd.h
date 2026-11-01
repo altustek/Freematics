@@ -158,9 +158,19 @@ typedef struct {
 #else
 // per client; the heap of the logger has a largest free block of about 4.6 KB, so 16 KB never fits
 #define HTTP_BUFFER_SIZE (2*1024 /*bytes*/)
-#define MAX_POST_PAYLOAD_SIZE (16*1024 /*bytes*/)
+#define MAX_POST_PAYLOAD_SIZE (1*1024 /*bytes*/) /* no handler takes a POST body */
 #define HTTP_MAX_CLIENTS_DEFAULT 16
 #endif
+
+// append a formatted string at buf[n] without ever letting n pass size-1 (snprintf returns the
+// length it WOULD have written, so "n += snprintf(...)" runs past the buffer once it is full)
+#define HTTP_SNPRINTF_ADD(n, buf, size, ...) do { \
+	int room_ = (int)(size) - (int)(n); \
+	if (room_ > 1) { \
+		int r_ = snprintf((char*)(buf) + (n), room_, __VA_ARGS__); \
+		(n) += r_ < room_ ? r_ : room_ - 1; \
+	} \
+} while (0)
 
 // per connection/socket structure
 typedef struct _HttpSocket{
