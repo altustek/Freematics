@@ -286,6 +286,19 @@
 #ifndef CELL_RETRY_WAIT
 #define CELL_RETRY_WAIT 180
 #endif
+// carrier preference for the SIM (numeric MCC+MNC, comma separated, tried in this order; automatic
+// selection is always tried last). Hologram roams on all of them; 310260 T-Mobile, 310410 AT&T.
+// A carrier is skipped for CELL_BAD_NOSERVICE seconds after it failed to register and for
+// CELL_BAD_NODATA seconds after it registered but the server login failed. Empty string = automatic only.
+#ifndef CELL_CARRIERS
+#define CELL_CARRIERS "310260,310410"
+#endif
+#ifndef CELL_BAD_NOSERVICE
+#define CELL_BAD_NOSERVICE 120
+#endif
+#ifndef CELL_BAD_NODATA
+#define CELL_BAD_NODATA 1800
+#endif
 // engine jumpstart voltage for waking up (when MEMS unavailable) 
 #define JUMPSTART_VOLTAGE 14 /* V */
 // reset device after waking up

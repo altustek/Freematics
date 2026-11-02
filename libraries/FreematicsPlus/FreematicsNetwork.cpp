@@ -560,6 +560,16 @@ String CellSIMCOM::getOperatorName()
   return "";
 }
 
+bool CellSIMCOM::selectOperator(const char* plmn, unsigned int timeout)
+{
+  if (plmn && *plmn) {
+    sprintf(m_buffer, "AT+COPS=1,2,\"%s\"\r", plmn);
+  } else {
+    strcpy(m_buffer, "AT+COPS=0\r");
+  }
+  return sendCommand(m_buffer, timeout);
+}
+
 bool CellSIMCOM::check(unsigned int timeout)
 {
   uint32_t t = millis();

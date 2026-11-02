@@ -123,6 +123,8 @@ public:
     virtual String getIP();
     int RSSI();
     String getOperatorName();
+    // select a network by numeric MCC+MNC (e.g. "310410"); null or empty = automatic
+    bool selectOperator(const char* plmn, unsigned int timeout = 30000);
     bool getCellInfo(CELL_INFO& info);
     bool checkSIM(const char* pin = 0);
     virtual String queryIP(const char* host);
