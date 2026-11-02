@@ -355,6 +355,7 @@ bool TeleClientUDP::connect(bool quick)
         delay(1000);
         continue;
       }
+      cell.setFallbackIP(wifi.queryIP(SERVER_HOST));
     }
     else
 #endif

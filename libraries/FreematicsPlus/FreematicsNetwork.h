@@ -157,8 +157,11 @@ public:
     bool close();
     bool send(const char* data, unsigned int len);
     char* receive(int* pbytes = 0, unsigned int timeout = 5000);
+    // address to use when the modem's DNS lookup fails (e.g. resolved earlier over WiFi)
+    void setFallbackIP(const String& ip) { fallbackIP = ip; }
 protected:
     String udpIP;
+    String fallbackIP;
     uint16_t udpPort = 0;
 };
 

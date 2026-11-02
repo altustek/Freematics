@@ -400,6 +400,15 @@ bool CellSIMCOM::setup(const char* apn, const char* username, const char* passwo
         sendCommand("AT+CIPMODE=0\r");
       }
       sendCommand("AT+NETOPEN\r");
+#ifndef CELL_DNS_PRIMARY
+#define CELL_DNS_PRIMARY "1.1.1.1"
+#define CELL_DNS_SECONDARY "8.8.8.8"
+#endif
+      // some carrier networks (seen on Verizon via Hologram) hand out a DNS server that never answers
+      if (m_type != CELL_SIM7670) {
+        sprintf(m_buffer, "AT+CDNSCFG=\"%s\",\"%s\"\r", CELL_DNS_PRIMARY, CELL_DNS_SECONDARY);
+        Serial.println(sendCommand(m_buffer) ? "[DNS] servers set" : "[DNS] set failed");
+      }
     } while(0);
   }
   if (!success) Serial.println(m_buffer);
@@ -621,6 +630,7 @@ String CellSIMCOM::queryIP(const char* host)
     }
   } else {
     sprintf(m_buffer, "AT+CDNSGIP=\"%s\"\r", host);
+    uint32_t t = millis();
     if (sendCommand(m_buffer, 10000)) {
       char *p = strstr(m_buffer, host);
       if (p) {
@@ -629,10 +639,12 @@ String CellSIMCOM::queryIP(const char* host)
           char *ip = p + 2;
           p = strchr(ip, '\"');
           if (p) *p = 0;
+          Serial.printf("[DNS] resolved in %u ms\n", (unsigned int)(millis() - t));
           return ip;
         }
       }
     }
+    Serial.printf("[DNS] lookup failed after %u ms\n", (unsigned int)(millis() - t));
   }
   return "";
 }
@@ -751,8 +763,15 @@ bool CellUDP::open(const char* host, uint16_t port)
 {
   if (!m_device) return false;
   if (host) {
-    udpIP = queryIP(host);
-    if (!udpIP.length()) {
+    String ip = queryIP(host);
+    if (ip.length()) {
+      udpIP = ip;
+    } else if (udpIP.length() && udpIP != host) {
+      Serial.println("[DNS] using last resolved address");
+    } else if (fallbackIP.length()) {
+      udpIP = fallbackIP;
+      Serial.println("[DNS] using fallback address");
+    } else {
       udpIP = host;
     }
     udpPort = port;
