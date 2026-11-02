@@ -16,6 +16,7 @@
 ******************************************************************************/
 
 #include <FreematicsPlus.h>
+#include <Preferences.h>
 #include "telestore.h"
 #include "teleclient.h"
 #include "config.h"
@@ -320,6 +321,26 @@ bool TeleClientUDP::notify(byte event, const char* payload)
   return false;
 }
 
+// The server address is kept in NVS so a cold boot with no WiFi can still reach the server
+// when the carrier's DNS does not answer (Verizon via Hologram).
+__attribute__((unused)) static void rememberServerIP(CellUDP& cell, const String& ip)
+{
+  Preferences prefs;
+  if (!ip.length() || ip == "0.0.0.0" || !prefs.begin("tele", false)) return;
+  if (prefs.getString("srvip", "") != ip) prefs.putString("srvip", ip);
+  prefs.end();
+  cell.setFallbackIP(ip);
+}
+
+static void loadServerIP(CellUDP& cell)
+{
+  Preferences prefs;
+  if (!prefs.begin("tele", true)) return;
+  String ip = prefs.getString("srvip", "");
+  prefs.end();
+  if (ip.length()) cell.setFallbackIP(ip);
+}
+
 bool TeleClientUDP::connect(bool quick)
 {
   byte event = login ? EVENT_RECONNECT : EVENT_LOGIN;
@@ -339,6 +360,7 @@ bool TeleClientUDP::connect(bool quick)
   }
 
   packets = 0;
+  loadServerIP(cell);
 
   // connect to telematics server
   for (byte attempts = 0; attempts < 3; attempts++) {
@@ -355,7 +377,7 @@ bool TeleClientUDP::connect(bool quick)
         delay(1000);
         continue;
       }
-      cell.setFallbackIP(wifi.queryIP(SERVER_HOST));
+      rememberServerIP(cell, wifi.queryIP(SERVER_HOST));
     }
     else
 #endif
