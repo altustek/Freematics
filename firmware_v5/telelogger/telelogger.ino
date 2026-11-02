@@ -1133,6 +1133,58 @@ void process()
   } while (millis() - startTime < dataInterval);
 }
 
+// Carrier preference (CELL_CARRIERS, then automatic). A carrier that fails is skipped for a while
+// so the next attempt tries the next one; the entry after the list is automatic selection.
+#define MAX_CARRIERS 6
+static char carrierPlmn[MAX_CARRIERS + 1][8];
+static uint32_t carrierBadUntil[MAX_CARRIERS + 1];
+static bool carrierBad[MAX_CARRIERS + 1];
+static int carrierCount = -1;
+static int carrierCur = 0;
+
+static void carrierInit()
+{
+  carrierCount = 0;
+  const char* p = CELL_CARRIERS;
+  while (*p && carrierCount < MAX_CARRIERS) {
+    const char* e = strchr(p, ',');
+    size_t n = e ? e - p : strlen(p);
+    if (n > 0 && n < sizeof(carrierPlmn[0])) {
+      memcpy(carrierPlmn[carrierCount], p, n);
+      carrierPlmn[carrierCount][n] = 0;
+      carrierCount++;
+    }
+    if (!e) break;
+    p = e + 1;
+  }
+  carrierPlmn[carrierCount][0] = 0; // automatic
+  carrierCount++;
+}
+
+static int carrierPick()
+{
+  if (carrierCount < 0) carrierInit();
+  uint32_t now = millis();
+  int soonest = 0;
+  int32_t soonestLeft = INT32_MAX;
+  for (int i = 0; i < carrierCount; i++) {
+    int32_t left = carrierBad[i] ? (int32_t)(carrierBadUntil[i] - now) : 0;
+    if (left <= 0) return i;
+    if (left < soonestLeft) {
+      soonestLeft = left;
+      soonest = i;
+    }
+  }
+  return soonest;
+}
+
+static void carrierResult(bool ok, unsigned int badSecs = 0)
+{
+  if (carrierCount < 0) return;
+  carrierBad[carrierCur] = !ok;
+  carrierBadUntil[carrierCur] = millis() + 1000UL * badSecs;
+}
+
 bool initCell(bool quick = false)
 {
   Serial.println("[CELL] Activating...");
@@ -1164,6 +1216,10 @@ bool initCell(bool quick = false)
     Serial.print("APN:");
     Serial.println(apn);
   }
+  carrierCur = carrierPick();
+  Serial.print("[CELL] Carrier:");
+  Serial.println(carrierPlmn[carrierCur][0] ? carrierPlmn[carrierCur] : "auto");
+  teleClient.cell.selectOperator(carrierPlmn[carrierCur]);
   if (teleClient.cell.setup(apn, APN_USERNAME, APN_PASSWORD)) {
     netop = teleClient.cell.getOperatorName();
     if (netop.length()) {
@@ -1191,6 +1247,7 @@ bool initCell(bool quick = false)
     }
     state.set(STATE_CELL_CONNECTED);
   } else {
+    carrierResult(false, CELL_BAD_NOSERVICE);
     char *p = strstr(teleClient.cell.getBuffer(), "+CPSI:");
     if (p) {
       char *q = strchr(p, '\r');
@@ -1444,7 +1501,9 @@ void telemetry(void* inst)
 #endif
       if (!state.check(STATE_WIFI_CONNECTED) && !state.check(STATE_CELL_CONNECTED)) {
         connErrors = 0;
-        if (!initCell() || !teleClient.connect()) {
+        bool cellUp = initCell();
+        if (!cellUp || !teleClient.connect()) {
+          if (cellUp) carrierResult(false, CELL_BAD_NODATA);
           teleClient.cell.end();
           state.clear(STATE_NET_READY | STATE_CELL_CONNECTED);
           Serial.println("[CELL] Deactivated");
@@ -1452,6 +1511,7 @@ void telemetry(void* inst)
           cellRetryWait();
           break;
         }
+        carrierResult(true);
         Serial.println("[CELL] In service");
         state.set(STATE_NET_READY);
         beep(50);
