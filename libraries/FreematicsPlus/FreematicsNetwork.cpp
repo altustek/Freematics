@@ -400,15 +400,6 @@ bool CellSIMCOM::setup(const char* apn, const char* username, const char* passwo
         sendCommand("AT+CIPMODE=0\r");
       }
       sendCommand("AT+NETOPEN\r");
-#ifndef CELL_DNS_PRIMARY
-#define CELL_DNS_PRIMARY "1.1.1.1"
-#define CELL_DNS_SECONDARY "8.8.8.8"
-#endif
-      // some carrier networks (seen on Verizon via Hologram) hand out a DNS server that never answers
-      if (m_type != CELL_SIM7670) {
-        sprintf(m_buffer, "AT+CDNSCFG=\"%s\",\"%s\"\r", CELL_DNS_PRIMARY, CELL_DNS_SECONDARY);
-        Serial.println(sendCommand(m_buffer) ? "[DNS] servers set" : "[DNS] set failed");
-      }
     } while(0);
   }
   if (!success) Serial.println(m_buffer);
@@ -759,9 +750,23 @@ char* CellSIMCOM::getBuffer()
   return m_buffer;
 }
 
+#ifndef CELL_DNS_PRIMARY
+#define CELL_DNS_PRIMARY "1.1.1.1"
+#define CELL_DNS_SECONDARY "8.8.8.8"
+#endif
+
 bool CellUDP::open(const char* host, uint16_t port)
 {
   if (!m_device) return false;
+  if (host && m_type != CELL_SIM7070 && m_type != CELL_SIM7670) {
+    // some carrier networks (seen on Verizon via Hologram) hand out a DNS server that never answers;
+    // set here, once the data connection is up, since it was refused right after AT+NETOPEN
+    sprintf(m_buffer, "AT+CDNSCFG=\"%s\",\"%s\"\r", CELL_DNS_PRIMARY, CELL_DNS_SECONDARY);
+    if (!sendCommand(m_buffer)) {
+      Serial.print("[DNS] set failed: ");
+      Serial.println(m_buffer);
+    }
+  }
   if (host) {
     String ip = queryIP(host);
     if (ip.length()) {
