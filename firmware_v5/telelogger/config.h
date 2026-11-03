@@ -286,6 +286,15 @@
 #ifndef CELL_RETRY_WAIT
 #define CELL_RETRY_WAIT 180
 #endif
+// SD card: a mount can fail now and then (seen: "f_mount failed: (3) The physical drive cannot work"
+// about 1 boot in 14 on the bench). Retry the mount SD_INIT_TRIES times at start, then every
+// SD_RETRY_INTERVAL seconds while the card is not mounted, so one failure does not cost the whole boot.
+#ifndef SD_INIT_TRIES
+#define SD_INIT_TRIES 4
+#endif
+#ifndef SD_RETRY_INTERVAL
+#define SD_RETRY_INTERVAL 15
+#endif
 // carrier preference for the SIM (numeric MCC+MNC, comma separated, tried in this order; automatic
 // selection is always tried last). Hologram roams on all of them; 310260 T-Mobile, 310410 AT&T.
 // A carrier is skipped for CELL_BAD_NOSERVICE seconds after it failed to register and for

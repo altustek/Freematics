@@ -761,6 +761,28 @@ void printTime()
 /*******************************************************************************
   Initializing all data logging components
 *******************************************************************************/
+#if STORAGE != STORAGE_NONE
+// mount the storage and open this boot's files; safe to call again while the card is not mounted
+bool initStorage()
+{
+  if (!state.check(STATE_STORAGE_READY)) {
+    // init storage
+    if (logger.init()) {
+      state.set(STATE_STORAGE_READY);
+    }
+  }
+  if (state.check(STATE_STORAGE_READY)) {
+    fileid = logger.begin();
+#if defined(DIAG_LOG) && STORAGE == STORAGE_SD
+    SD.mkdir("/LOGS");
+    diagLogReady = true;
+    flushDiagLog(true);
+#endif
+  }
+  return state.check(STATE_STORAGE_READY) && fileid;
+}
+#endif
+
 void initialize()
 {
   // dump buffer data
@@ -804,20 +826,7 @@ void initialize()
 #endif
 
 #if STORAGE != STORAGE_NONE
-  if (!state.check(STATE_STORAGE_READY)) {
-    // init storage
-    if (logger.init()) {
-      state.set(STATE_STORAGE_READY);
-    }
-  }
-  if (state.check(STATE_STORAGE_READY)) {
-    fileid = logger.begin();
-#if defined(DIAG_LOG) && STORAGE == STORAGE_SD
-    SD.mkdir("/LOGS");
-    diagLogReady = true;
-    flushDiagLog(true);
-#endif
-  }
+  initStorage();
 #endif
 
   // re-try OBD if connection not established
@@ -949,6 +958,14 @@ bool waitMotion(long timeout)
 *******************************************************************************/
 void process()
 {
+#if STORAGE != STORAGE_NONE
+  // card missing at start (failed mount): keep trying so the rest of the trip is still logged
+  static uint32_t lastStorageTry = 0;
+  if ((!state.check(STATE_STORAGE_READY) || !fileid) && millis() - lastStorageTry >= 1000UL * SD_RETRY_INTERVAL) {
+    lastStorageTry = millis();
+    if (initStorage()) Serial.println("[SD] logging started late");
+  }
+#endif
   static uint32_t lastGPStick = 0;
   uint32_t startTime = millis();
 
