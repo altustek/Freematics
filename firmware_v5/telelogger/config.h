@@ -306,6 +306,12 @@
 #ifndef CELL_BAD_NOSERVICE
 #define CELL_BAD_NOSERVICE 120
 #endif
+// Hologram SIMs fail on Verizon (registers, gets an IP, but DNS and UDP never work). When the automatic
+// selection ends up on an operator whose name contains this text the attempt is treated as failed and
+// the next carrier in the rotation is tried. Empty string = accept any operator.
+#ifndef CELL_AVOID_OPERATOR
+#define CELL_AVOID_OPERATOR "Verizon"
+#endif
 // Repeated NO SERVICE: after CELL_SEARCH_LONG_AFTER failed attempts in a row the registration search
 // is allowed CELL_SEARCH_LONG_MS instead of the default 30 s, and every CELL_DEEP_RESET_FAILS failures
 // the modem is left powered off for CELL_DEEP_RESET_MS before the next attempt so it drops its network state.

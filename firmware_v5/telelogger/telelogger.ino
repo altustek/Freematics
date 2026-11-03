@@ -1312,8 +1312,18 @@ bool initCell(bool quick = false)
   }
   unsigned int searchMs = cellFailStreak >= CELL_SEARCH_LONG_AFTER ? CELL_SEARCH_LONG_MS : 30000;
   if (searchMs > 30000) Serial.printf("[CELL] Long search (%u s) after %u failures\n", searchMs / 1000, cellFailStreak);
-  if (selected && teleClient.cell.setup(apn, APN_USERNAME, APN_PASSWORD, searchMs)) {
+  bool registered = selected && teleClient.cell.setup(apn, APN_USERNAME, APN_PASSWORD, searchMs);
+  if (registered) {
     netop = teleClient.cell.getOperatorName();
+    if (*CELL_AVOID_OPERATOR && netop.indexOf(CELL_AVOID_OPERATOR) >= 0) {
+      // only the automatic entry can land here; mark it bad so the next attempt starts with a manual carrier
+      Serial.print("[CELL] Avoiding ");
+      Serial.println(netop);
+      carrierResult(false, CELL_BAD_NODATA);
+      timeoutsNet = 0;
+      if (cellFailStreak < 255) cellFailStreak++;
+      return false;
+    }
     if (netop.length()) {
       Serial.print("Operator:");
       Serial.println(netop);
