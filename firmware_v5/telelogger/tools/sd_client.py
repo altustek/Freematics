@@ -5,7 +5,8 @@ usage: [FREEMATICS_PORT=/dev/cu.usbserial-XXXX] sd_client.py list [DIR]         
        sd_client.py get PATH [PATH ...] --out DIR
        sd_client.py get-all DIR --out OUTDIR
 
-Talks to the running telelogger without resetting it.
+Talks to the running telelogger without resetting it. get and get-all need the device in
+standby: it answers "ERR busy, trip in progress" while a trip is running (list always works).
 """
 import os, sys, termios, time, select
 
