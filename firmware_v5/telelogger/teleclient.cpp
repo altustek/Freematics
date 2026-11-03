@@ -323,10 +323,10 @@ bool TeleClientUDP::notify(byte event, const char* payload)
 
 // The server address is kept in NVS so a cold boot with no WiFi can still reach the server
 // when the carrier's DNS does not answer (Verizon via Hologram).
-__attribute__((unused)) static void rememberServerIP(CellUDP& cell, const String& ip)
+static void rememberServerIP(CellUDP& cell, const char* ip)
 {
   Preferences prefs;
-  if (!ip.length() || ip == "0.0.0.0" || !prefs.begin("tele", false)) return;
+  if (!ip || !*ip || !strcmp(ip, "0.0.0.0") || !prefs.begin("tele", false)) return;
   if (prefs.getString("srvip", "") != ip) prefs.putString("srvip", ip);
   prefs.end();
   cell.setFallbackIP(ip);
@@ -384,7 +384,8 @@ bool TeleClientUDP::connect(bool quick)
         delay(1000);
         continue;
       }
-      rememberServerIP(cell, wifi.queryIP(SERVER_HOST));
+      String ip = wifi.queryIP(SERVER_HOST);
+      rememberServerIP(cell, ip.c_str());
     }
     else
 #endif
@@ -413,6 +414,13 @@ bool TeleClientUDP::connect(bool quick)
       continue;
     }
     success = true;
+#if ENABLE_WIFI
+    if (!wifi.connected())
+#endif
+    {
+      // save the address the modem resolved, only now that the server answered
+      rememberServerIP(cell, cell.resolvedIP());
+    }
     break;
   }
   if (event == EVENT_LOGIN) startTime = millis();

@@ -779,6 +779,7 @@ bool CellUDP::open(const char* host, uint16_t port)
   }
   if (host) {
     String ip = queryIP(host);
+    m_resolved = ip.length() > 0;
     if (ip.length()) {
       udpIP = ip;
     } else if (udpIP.length() && udpIP != host) {
