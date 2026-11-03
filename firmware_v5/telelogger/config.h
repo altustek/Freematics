@@ -306,6 +306,11 @@
 #ifndef CELL_BAD_NOSERVICE
 #define CELL_BAD_NOSERVICE 120
 #endif
+// A manual AT+COPS to a carrier that is in range answers within a few seconds (2 to 14 s in the 2026-11-03
+// logs); one that is absent blocks until the timeout. Fail it after this long instead of 30 s.
+#ifndef CELL_COPS_TIMEOUT
+#define CELL_COPS_TIMEOUT 15000
+#endif
 // Hologram SIMs fail on Verizon (registers, gets an IP, but DNS and UDP never work). When the automatic
 // selection ends up on an operator whose name contains this text the attempt is treated as failed and
 // the next carrier in the rotation is tried. Empty string = accept any operator.
