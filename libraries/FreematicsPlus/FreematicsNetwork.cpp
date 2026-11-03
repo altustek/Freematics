@@ -562,6 +562,9 @@ String CellSIMCOM::getOperatorName()
 
 bool CellSIMCOM::selectOperator(const char* plmn, unsigned int timeout)
 {
+  if (!m_device) return false;
+  // drop a late reply of an earlier timed-out COPS so it is not taken as this answer
+  m_device->xbPurge();
   if (plmn && *plmn) {
     sprintf(m_buffer, "AT+COPS=1,2,\"%s\"\r", plmn);
   } else {
