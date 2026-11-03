@@ -1503,6 +1503,8 @@ void telemetry(void* inst)
           if (initCell()) {
             Serial.println("[CELL] Ping...");
             pinged = teleClient.ping();
+            // registered but no data must rotate the carrier, a good ping resets the rotation
+            carrierResult(pinged, pinged ? 0 : CELL_BAD_NODATA);
           }
         }
         if (pinged) {
