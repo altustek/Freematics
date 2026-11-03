@@ -1185,11 +1185,22 @@ static void carrierInit()
   const char* p = CELL_CARRIERS;
   while (*p && carrierCount < MAX_CARRIERS) {
     const char* e = strchr(p, ',');
-    size_t n = e ? e - p : strlen(p);
-    if (n > 0 && n < sizeof(carrierPlmn[0])) {
-      memcpy(carrierPlmn[carrierCount], p, n);
+    const char* q = e ? e : p + strlen(p);
+    const char* b = p;
+    // trim spaces around the entry, accept MCC+MNC only (5 or 6 digits)
+    while (b < q && *b == ' ') b++;
+    while (q > b && q[-1] == ' ') q--;
+    size_t n = q - b;
+    bool valid = (n == 5 || n == 6) && n < sizeof(carrierPlmn[0]);
+    for (const char* c = b; valid && c < q; c++) valid = *c >= '0' && *c <= '9';
+    if (valid) {
+      memcpy(carrierPlmn[carrierCount], b, n);
       carrierPlmn[carrierCount][n] = 0;
       carrierCount++;
+    } else if (n > 0) {
+      Serial.print("[CELL] bad carrier entry ignored: ");
+      Serial.write((const uint8_t*)b, n);
+      Serial.println();
     }
     if (!e) break;
     p = e + 1;
