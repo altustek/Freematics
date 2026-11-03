@@ -12,6 +12,8 @@
 
 // Traccar server (Freematics protocol, UDP)
 #define SERVER_HOST "traccar.example.com"
+// optional: server IP used when DNS fails and no address has been learned yet
+// #define SERVER_IP "203.0.113.10"
 #define SERVER_PORT 5170
 //#define SERVER_PROTOCOL PROTOCOL_UDP
 
