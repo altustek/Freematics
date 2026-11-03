@@ -161,9 +161,12 @@ public:
     char* receive(int* pbytes = 0, unsigned int timeout = 5000);
     // address to use when the modem's DNS lookup fails (e.g. resolved earlier over WiFi)
     void setFallbackIP(const String& ip) { fallbackIP = ip; }
+    // address from the last successful DNS lookup, null if open() used a fallback
+    const char* resolvedIP() { return m_resolved ? udpIP.c_str() : 0; }
 protected:
     String udpIP;
     String fallbackIP;
+    bool m_resolved = false;
     uint16_t udpPort = 0;
 };
 

@@ -323,21 +323,36 @@ bool TeleClientUDP::notify(byte event, const char* payload)
 
 // The server address is kept in NVS so a cold boot with no WiFi can still reach the server
 // when the carrier's DNS does not answer (Verizon via Hologram).
-__attribute__((unused)) static void rememberServerIP(CellUDP& cell, const String& ip)
+// address held in NVS, to skip needless NVS opens
+static char lastIP[16] = "";
+static bool ipLoaded = false;
+
+static void rememberServerIP(CellUDP& cell, const char* ip)
 {
+  if (!ip || !*ip || !strcmp(ip, "0.0.0.0") || strlen(ip) >= sizeof(lastIP)) return;
+  if (!strcmp(ip, lastIP)) return;
   Preferences prefs;
-  if (!ip.length() || ip == "0.0.0.0" || !prefs.begin("tele", false)) return;
+  if (!prefs.begin("tele", false)) return;
   if (prefs.getString("srvip", "") != ip) prefs.putString("srvip", ip);
   prefs.end();
+  strcpy(lastIP, ip);
   cell.setFallbackIP(ip);
 }
 
+// once per boot: later changes go through rememberServerIP()
 static void loadServerIP(CellUDP& cell)
 {
+  if (ipLoaded) return;
+  ipLoaded = true;
   Preferences prefs;
-  if (!prefs.begin("tele", true)) return;
-  String ip = prefs.getString("srvip", "");
-  prefs.end();
+  String ip;
+  // read-only open fails while the namespace does not exist yet (fresh device)
+  if (prefs.begin("tele", true)) {
+    ip = prefs.getString("srvip", "");
+    prefs.end();
+    // only what NVS holds counts as known, so a build-time address still gets saved once confirmed
+    if (ip.length() < sizeof(lastIP)) strcpy(lastIP, ip.c_str());
+  }
 #ifdef SERVER_IP
   // build-time address (secrets.h) for a first boot with nothing learned yet
   if (!ip.length()) ip = SERVER_IP;
@@ -381,7 +396,8 @@ bool TeleClientUDP::connect(bool quick)
         delay(1000);
         continue;
       }
-      rememberServerIP(cell, wifi.queryIP(SERVER_HOST));
+      String ip = wifi.queryIP(SERVER_HOST);
+      rememberServerIP(cell, ip.c_str());
     }
     else
 #endif
@@ -410,6 +426,13 @@ bool TeleClientUDP::connect(bool quick)
       continue;
     }
     success = true;
+#if ENABLE_WIFI
+    if (!wifi.connected())
+#endif
+    {
+      // save the address the modem resolved, only now that the server answered
+      rememberServerIP(cell, cell.resolvedIP());
+    }
     break;
   }
   if (event == EVENT_LOGIN) startTime = millis();
