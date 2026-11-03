@@ -1267,11 +1267,21 @@ bool initCell(bool quick = false)
     Serial.print("APN:");
     Serial.println(apn);
   }
-  carrierCur = carrierPick();
-  Serial.print("[CELL] Carrier:");
-  Serial.println(carrierPlmn[carrierCur][0] ? carrierPlmn[carrierCur] : "auto");
-  teleClient.cell.selectOperator(carrierPlmn[carrierCur]);
-  if (teleClient.cell.setup(apn, APN_USERNAME, APN_PASSWORD)) {
+  // a manual selection the modem refuses is not retried in setup(): move on to the next carrier
+  // within this power-on; the automatic entry is the last resort and always goes on to setup()
+  bool selected = false;
+  if (carrierCount < 0) carrierInit();
+  for (int i = 0; i < carrierCount && !selected; i++) {
+    carrierCur = carrierPick();
+    Serial.print("[CELL] Carrier:");
+    Serial.println(carrierPlmn[carrierCur][0] ? carrierPlmn[carrierCur] : "auto");
+    selected = teleClient.cell.selectOperator(carrierPlmn[carrierCur]) || !carrierPlmn[carrierCur][0];
+    if (!selected) {
+      Serial.println("[CELL] Carrier not available");
+      carrierResult(false, CELL_BAD_NOSERVICE);
+    }
+  }
+  if (selected && teleClient.cell.setup(apn, APN_USERNAME, APN_PASSWORD)) {
     netop = teleClient.cell.getOperatorName();
     if (netop.length()) {
       Serial.print("Operator:");
@@ -1298,7 +1308,7 @@ bool initCell(bool quick = false)
     }
     state.set(STATE_CELL_CONNECTED);
   } else {
-    carrierResult(false, CELL_BAD_NOSERVICE);
+    if (selected) carrierResult(false, CELL_BAD_NOSERVICE);
     char *p = strstr(teleClient.cell.getBuffer(), "+CPSI:");
     if (p) {
       char *q = strchr(p, '\r');
