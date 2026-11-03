@@ -1168,14 +1168,16 @@ void process()
   } while (millis() - startTime < dataInterval);
 }
 
-// Carrier preference (CELL_CARRIERS, then automatic). A carrier that fails is skipped for a while
-// so the next attempt tries the next one; the entry after the list is automatic selection.
+// Carrier preference (CELL_CARRIERS, then automatic). After a failure the next attempt starts at the
+// entry after the failed one (cyclic, skipping entries still marked bad), so the list is walked in
+// order, then automatic, then back to the first. After a success the search restarts at the first.
 #define MAX_CARRIERS 6
 static char carrierPlmn[MAX_CARRIERS + 1][8];
 static uint32_t carrierBadUntil[MAX_CARRIERS + 1];
 static bool carrierBad[MAX_CARRIERS + 1];
 static int carrierCount = -1;
 static int carrierCur = 0;
+static bool carrierLastFailed = false;
 
 static void carrierInit()
 {
@@ -1202,7 +1204,9 @@ static int carrierPick()
   uint32_t now = millis();
   int soonest = 0;
   int32_t soonestLeft = INT32_MAX;
-  for (int i = 0; i < carrierCount; i++) {
+  int start = carrierLastFailed ? (carrierCur + 1) % carrierCount : 0;
+  for (int n = 0; n < carrierCount; n++) {
+    int i = (start + n) % carrierCount;
     int32_t left = carrierBad[i] ? (int32_t)(carrierBadUntil[i] - now) : 0;
     if (left <= 0) return i;
     if (left < soonestLeft) {
@@ -1216,6 +1220,7 @@ static int carrierPick()
 static void carrierResult(bool ok, unsigned int badSecs = 0)
 {
   if (carrierCount < 0) return;
+  carrierLastFailed = !ok;
   carrierBad[carrierCur] = !ok;
   carrierBadUntil[carrierCur] = millis() + 1000UL * badSecs;
 }
