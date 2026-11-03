@@ -147,6 +147,7 @@ protected:
     char* m_buffer = 0;
     char m_model[12] = {0};
     CFreematics* m_device = 0;
+    bool m_dnsTried = false;
     GPS_DATA* m_gps = 0;
     CELL_TYPE m_type = CELL_SIM7600;
     int m_incoming = 0;

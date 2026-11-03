@@ -246,6 +246,7 @@ bool CellSIMCOM::begin(CFreematics* device)
 {
   getBuffer();
   m_device = device;
+  m_dnsTried = false;
   for (byte n = 0; n < 30; n++) {
     device->xbTogglePower(200);
     device->xbPurge();
@@ -771,9 +772,11 @@ char* CellSIMCOM::getBuffer()
 bool CellUDP::open(const char* host, uint16_t port)
 {
   if (!m_device) return false;
-  if (host && m_type != CELL_SIM7070 && m_type != CELL_SIM7670) {
+  if (host && !m_dnsTried && m_type != CELL_SIM7070 && m_type != CELL_SIM7670) {
     // some carrier networks (seen on Verizon via Hologram) hand out a DNS server that never answers;
-    // set here, once the data connection is up, since it was refused right after AT+NETOPEN
+    // tried once per power-on (the SIM7600 B03V07 firmware refuses it), set here once the data
+    // connection is up, since it was refused right after AT+NETOPEN
+    m_dnsTried = true;
     sprintf(m_buffer, "AT+CDNSCFG=\"%s\",\"%s\"\r", CELL_DNS_PRIMARY, CELL_DNS_SECONDARY);
     if (!sendCommand(m_buffer)) {
       Serial.print("[DNS] set failed: ");
