@@ -323,23 +323,35 @@ bool TeleClientUDP::notify(byte event, const char* payload)
 
 // The server address is kept in NVS so a cold boot with no WiFi can still reach the server
 // when the carrier's DNS does not answer (Verizon via Hologram).
+// address held in NVS, to skip needless NVS opens
+static char lastIP[16] = "";
+static bool ipLoaded = false;
+
 static void rememberServerIP(CellUDP& cell, const char* ip)
 {
+  if (!ip || !*ip || !strcmp(ip, "0.0.0.0") || strlen(ip) >= sizeof(lastIP)) return;
+  if (!strcmp(ip, lastIP)) return;
   Preferences prefs;
-  if (!ip || !*ip || !strcmp(ip, "0.0.0.0") || !prefs.begin("tele", false)) return;
+  if (!prefs.begin("tele", false)) return;
   if (prefs.getString("srvip", "") != ip) prefs.putString("srvip", ip);
   prefs.end();
+  strcpy(lastIP, ip);
   cell.setFallbackIP(ip);
 }
 
+// once per boot: later changes go through rememberServerIP()
 static void loadServerIP(CellUDP& cell)
 {
+  if (ipLoaded) return;
+  ipLoaded = true;
   Preferences prefs;
   String ip;
   // read-only open fails while the namespace does not exist yet (fresh device)
   if (prefs.begin("tele", true)) {
     ip = prefs.getString("srvip", "");
     prefs.end();
+    // only what NVS holds counts as known, so a build-time address still gets saved once confirmed
+    if (ip.length() < sizeof(lastIP)) strcpy(lastIP, ip.c_str());
   }
 #ifdef SERVER_IP
   // build-time address (secrets.h) for a first boot with nothing learned yet
