@@ -297,8 +297,9 @@
 #endif
 // carrier preference for the SIM (numeric MCC+MNC, comma separated, tried in this order; automatic
 // selection is always tried last). Hologram roams on all of them; 310260 T-Mobile, 310410 AT&T.
-// A carrier is skipped for CELL_BAD_NOSERVICE seconds after it failed to register and for
-// CELL_BAD_NODATA seconds after it registered but the server login failed. Empty string = automatic only.
+// After a failure the next attempt moves on to the next entry. A failed carrier is also not picked
+// again for CELL_BAD_NOSERVICE seconds after it failed to register, or CELL_BAD_NODATA seconds after
+// it registered but the server login failed (matters when the rotation wraps). Empty string = automatic only.
 #ifndef CELL_CARRIERS
 #define CELL_CARRIERS "310410,310260"
 #endif

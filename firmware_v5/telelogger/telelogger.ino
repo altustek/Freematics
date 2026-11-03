@@ -1168,14 +1168,16 @@ void process()
   } while (millis() - startTime < dataInterval);
 }
 
-// Carrier preference (CELL_CARRIERS, then automatic). A carrier that fails is skipped for a while
-// so the next attempt tries the next one; the entry after the list is automatic selection.
+// Carrier preference (CELL_CARRIERS, then automatic). After a failure the next attempt starts at the
+// entry after the failed one (cyclic, skipping entries still marked bad), so the list is walked in
+// order, then automatic, then back to the first. After a success the search restarts at the first.
 #define MAX_CARRIERS 6
 static char carrierPlmn[MAX_CARRIERS + 1][8];
 static uint32_t carrierBadUntil[MAX_CARRIERS + 1];
 static bool carrierBad[MAX_CARRIERS + 1];
 static int carrierCount = -1;
 static int carrierCur = 0;
+static bool carrierLastFailed = false;
 
 static void carrierInit()
 {
@@ -1183,11 +1185,22 @@ static void carrierInit()
   const char* p = CELL_CARRIERS;
   while (*p && carrierCount < MAX_CARRIERS) {
     const char* e = strchr(p, ',');
-    size_t n = e ? e - p : strlen(p);
-    if (n > 0 && n < sizeof(carrierPlmn[0])) {
-      memcpy(carrierPlmn[carrierCount], p, n);
+    const char* q = e ? e : p + strlen(p);
+    const char* b = p;
+    // trim spaces around the entry, accept MCC+MNC only (5 or 6 digits)
+    while (b < q && *b == ' ') b++;
+    while (q > b && q[-1] == ' ') q--;
+    size_t n = q - b;
+    bool valid = (n == 5 || n == 6) && n < sizeof(carrierPlmn[0]);
+    for (const char* c = b; valid && c < q; c++) valid = *c >= '0' && *c <= '9';
+    if (valid) {
+      memcpy(carrierPlmn[carrierCount], b, n);
       carrierPlmn[carrierCount][n] = 0;
       carrierCount++;
+    } else if (n > 0) {
+      Serial.print("[CELL] bad carrier entry ignored: ");
+      Serial.write((const uint8_t*)b, n);
+      Serial.println();
     }
     if (!e) break;
     p = e + 1;
@@ -1202,7 +1215,9 @@ static int carrierPick()
   uint32_t now = millis();
   int soonest = 0;
   int32_t soonestLeft = INT32_MAX;
-  for (int i = 0; i < carrierCount; i++) {
+  int start = carrierLastFailed ? (carrierCur + 1) % carrierCount : 0;
+  for (int n = 0; n < carrierCount; n++) {
+    int i = (start + n) % carrierCount;
     int32_t left = carrierBad[i] ? (int32_t)(carrierBadUntil[i] - now) : 0;
     if (left <= 0) return i;
     if (left < soonestLeft) {
@@ -1216,6 +1231,7 @@ static int carrierPick()
 static void carrierResult(bool ok, unsigned int badSecs = 0)
 {
   if (carrierCount < 0) return;
+  carrierLastFailed = !ok;
   carrierBad[carrierCur] = !ok;
   carrierBadUntil[carrierCur] = millis() + 1000UL * badSecs;
 }
