@@ -300,7 +300,7 @@
 // A carrier is skipped for CELL_BAD_NOSERVICE seconds after it failed to register and for
 // CELL_BAD_NODATA seconds after it registered but the server login failed. Empty string = automatic only.
 #ifndef CELL_CARRIERS
-#define CELL_CARRIERS "310260,310410"
+#define CELL_CARRIERS "310410,310260"
 #endif
 #ifndef CELL_BAD_NOSERVICE
 #define CELL_BAD_NOSERVICE 120
