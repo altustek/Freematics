@@ -218,6 +218,9 @@ void flushDiagLog(bool force = false)
 //   SD LIST [dir]  -> BEGIN LIST / "<name> <size> <YYYY-mm-dd HH:MM:SS>" / END LIST
 //   SD GET <path>  -> BEGIN FILE <path> <size> / <raw bytes> / END FILE
 // Other output is held back from USB (still logged) while a command runs.
+// GET blocks sampling for the whole transfer (~90 s per MB), so it is refused while a trip runs
+// (bench/standby use only); LIST is fast and always allowed.
+static bool tripRunning();
 void sdCommand(const char* cmd)
 {
   Print& out = DiagSerial.raw();
@@ -240,6 +243,10 @@ void sdCommand(const char* cmd)
     }
     out.print("END LIST\n");
   } else if (!strncmp(cmd, "GET ", 4)) {
+    if (tripRunning()) {
+      out.print("ERR busy, trip in progress\n");
+      return;
+    }
     flushDiagLog(true); // so the current log is complete
     File f = SD.open(cmd + 4, FILE_READ);
     if (!f || f.isDirectory()) {
@@ -346,6 +353,8 @@ OLED_SH1106 oled;
 #endif
 
 State state;
+
+static bool tripRunning() { return state.check(STATE_WORKING); }
 
 void printTimeoutStats()
 {
