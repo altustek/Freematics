@@ -335,9 +335,12 @@ __attribute__((unused)) static void rememberServerIP(CellUDP& cell, const String
 static void loadServerIP(CellUDP& cell)
 {
   Preferences prefs;
-  if (!prefs.begin("tele", true)) return;
-  String ip = prefs.getString("srvip", "");
-  prefs.end();
+  String ip;
+  // read-only open fails while the namespace does not exist yet (fresh device)
+  if (prefs.begin("tele", true)) {
+    ip = prefs.getString("srvip", "");
+    prefs.end();
+  }
 #ifdef SERVER_IP
   // build-time address (secrets.h) for a first boot with nothing learned yet
   if (!ip.length()) ip = SERVER_IP;
