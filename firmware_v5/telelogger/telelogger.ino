@@ -1245,8 +1245,17 @@ static void carrierResult(bool ok, unsigned int badSecs = 0)
   carrierBadUntil[carrierCur] = millis() + 1000UL * badSecs;
 }
 
+// consecutive failed registrations; a long run means a coverage hole or a stuck modem
+static byte cellFailStreak = 0;
+
 bool initCell(bool quick = false)
 {
+  if (!quick && cellFailStreak && cellFailStreak % CELL_DEEP_RESET_FAILS == 0) {
+    // the modem is already powered off after each failed attempt; keep it off long enough to drop its network state
+    Serial.printf("[CELL] %u failed attempts, modem off for %u s\n", cellFailStreak, CELL_DEEP_RESET_MS / 1000);
+    teleClient.cell.powerOffIfOn(&sys);
+    delay(CELL_DEEP_RESET_MS);
+  }
   Serial.println("[CELL] Activating...");
   // power on network module
   if (!teleClient.cell.begin(&sys)) {
@@ -1290,7 +1299,9 @@ bool initCell(bool quick = false)
       carrierResult(false, CELL_BAD_NOSERVICE);
     }
   }
-  if (selected && teleClient.cell.setup(apn, APN_USERNAME, APN_PASSWORD)) {
+  unsigned int searchMs = cellFailStreak >= CELL_SEARCH_LONG_AFTER ? CELL_SEARCH_LONG_MS : 30000;
+  if (searchMs > 30000) Serial.printf("[CELL] Long search (%u s) after %u failures\n", searchMs / 1000, cellFailStreak);
+  if (selected && teleClient.cell.setup(apn, APN_USERNAME, APN_PASSWORD, searchMs)) {
     netop = teleClient.cell.getOperatorName();
     if (netop.length()) {
       Serial.print("Operator:");
@@ -1332,6 +1343,8 @@ bool initCell(bool quick = false)
     }
   }
   timeoutsNet = 0;
+  if (state.check(STATE_CELL_CONNECTED)) cellFailStreak = 0;
+  else if (cellFailStreak < 255) cellFailStreak++;
   return state.check(STATE_CELL_CONNECTED);
 }
 

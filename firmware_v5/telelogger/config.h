@@ -306,6 +306,21 @@
 #ifndef CELL_BAD_NOSERVICE
 #define CELL_BAD_NOSERVICE 120
 #endif
+// Repeated NO SERVICE: after CELL_SEARCH_LONG_AFTER failed attempts in a row the registration search
+// is allowed CELL_SEARCH_LONG_MS instead of the default 30 s, and every CELL_DEEP_RESET_FAILS failures
+// the modem is left powered off for CELL_DEEP_RESET_MS before the next attempt so it drops its network state.
+#ifndef CELL_SEARCH_LONG_AFTER
+#define CELL_SEARCH_LONG_AFTER 3
+#endif
+#ifndef CELL_SEARCH_LONG_MS
+#define CELL_SEARCH_LONG_MS 90000
+#endif
+#ifndef CELL_DEEP_RESET_FAILS
+#define CELL_DEEP_RESET_FAILS 5
+#endif
+#ifndef CELL_DEEP_RESET_MS
+#define CELL_DEEP_RESET_MS 10000
+#endif
 #ifndef CELL_BAD_NODATA
 #define CELL_BAD_NODATA 1800
 #endif
