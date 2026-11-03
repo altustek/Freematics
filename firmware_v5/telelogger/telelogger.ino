@@ -1304,7 +1304,7 @@ bool initCell(bool quick = false)
     carrierCur = carrierPick();
     Serial.print("[CELL] Carrier:");
     Serial.println(carrierPlmn[carrierCur][0] ? carrierPlmn[carrierCur] : "auto");
-    selected = teleClient.cell.selectOperator(carrierPlmn[carrierCur]) || !carrierPlmn[carrierCur][0];
+    selected = teleClient.cell.selectOperator(carrierPlmn[carrierCur], CELL_COPS_TIMEOUT) || !carrierPlmn[carrierCur][0];
     if (!selected) {
       Serial.println("[CELL] Carrier not available");
       carrierResult(false, CELL_BAD_NOSERVICE);
