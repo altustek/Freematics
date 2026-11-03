@@ -151,22 +151,31 @@ int FileLogger::getFileID(File& root)
     }
 }
 
+#ifndef SD_INIT_TRIES
+#define SD_INIT_TRIES 4
+#endif
+
 bool SDLogger::init()
 {
-    SPI.begin();
-    if (SD.begin(PIN_SD_CS, SPI, SPI_FREQ)) {
-        unsigned int total = SD.totalBytes() >> 20;
-        unsigned int used = SD.usedBytes() >> 20;
-        Serial.print("SD:");
-        Serial.print(total);
-        Serial.print(" MB total, ");
-        Serial.print(used);
-        Serial.println(" MB used");
-        return true;
-    } else {
-        Serial.println("NO SD CARD");
-        return false;
+    for (int attempt = 1; attempt <= SD_INIT_TRIES; attempt++) {
+        SPI.begin();
+        if (SD.begin(PIN_SD_CS, SPI, SPI_FREQ)) {
+            unsigned int total = SD.totalBytes() >> 20;
+            unsigned int used = SD.usedBytes() >> 20;
+            Serial.print("SD:");
+            Serial.print(total);
+            Serial.print(" MB total, ");
+            Serial.print(used);
+            Serial.println(" MB used");
+            if (attempt > 1) Serial.printf("SD mounted on try %d\n", attempt);
+            return true;
+        }
+        Serial.printf("NO SD CARD (try %d/%d)\n", attempt, SD_INIT_TRIES);
+        // release the bus and give the card time before the next attempt
+        SD.end();
+        delay(250 * attempt);
     }
+    return false;
 }
 
 uint32_t SDLogger::begin()
