@@ -201,6 +201,7 @@ uint32_t SDLogger::begin()
 
 void SDLogger::flush()
 {
+    if (m_id == 0) return;
     char path[24];
     sprintf(path, "/DATA/%u.CSV", m_id);
     m_file.close();

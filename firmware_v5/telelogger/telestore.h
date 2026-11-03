@@ -59,6 +59,7 @@ public:
     FileLogger() { m_delimiter = ','; }
     virtual void dispatch(const char* buf, byte len);
     virtual uint32_t size() { return m_size; }
+    bool active() { return m_id != 0; }
     virtual void end()
     {
         m_file.close();

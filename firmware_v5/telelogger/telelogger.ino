@@ -959,9 +959,9 @@ bool waitMotion(long timeout)
 void process()
 {
 #if STORAGE != STORAGE_NONE
-  // card missing at start (failed mount): keep trying so the rest of the trip is still logged
+  // card missing at start (failed mount) or failed mid-trip (write error): keep trying so the rest of the trip is still logged
   static uint32_t lastStorageTry = 0;
-  if ((!state.check(STATE_STORAGE_READY) || !fileid) && millis() - lastStorageTry >= 1000UL * SD_RETRY_INTERVAL) {
+  if ((!state.check(STATE_STORAGE_READY) || !logger.active()) && millis() - lastStorageTry >= 1000UL * SD_RETRY_INTERVAL) {
     lastStorageTry = millis();
     if (initStorage()) Serial.println("[SD] logging started late");
   }
@@ -1100,13 +1100,26 @@ void process()
 #if STORAGE != STORAGE_NONE
   if (state.check(STATE_STORAGE_READY)) {
     buffer->serialize(logger);
-    uint16_t sizeKB = (uint16_t)(logger.size() >> 10);
-    if (sizeKB != lastSizeKB) {
-      logger.flush();
-      lastSizeKB = sizeKB;
-      Serial.print("[FILE] ");
-      Serial.print(sizeKB);
-      Serial.println("KB");
+    if (!logger.active()) {
+      // write error closed the file: unmount so the retry above remounts and opens a new file
+      Serial.println("[SD] write error, remounting");
+      state.clear(STATE_STORAGE_READY);
+      fileid = 0;
+#if defined(DIAG_LOG) && STORAGE == STORAGE_SD
+      diagLogReady = false;
+#endif
+#if STORAGE == STORAGE_SD
+      SD.end();
+#endif
+    } else {
+      uint16_t sizeKB = (uint16_t)(logger.size() >> 10);
+      if (sizeKB != lastSizeKB) {
+        logger.flush();
+        lastSizeKB = sizeKB;
+        Serial.print("[FILE] ");
+        Serial.print(sizeKB);
+        Serial.println("KB");
+      }
     }
   }
 #endif
