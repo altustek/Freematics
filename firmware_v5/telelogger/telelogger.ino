@@ -577,7 +577,13 @@ bool processGPS(CBuffer* buffer)
     *(p + 1) = 0;
   }
   if (gd->lng == 0 && gd->lat == 0) {
-    // coordinates not ready
+    // coordinates not ready: a status line every 10 s tells a receiver that is searching from one that is silent
+    static uint32_t lastNoFixLog = 0;
+    if (millis() - lastNoFixLog >= 10000) {
+      lastNoFixLog = millis();
+      Serial.printf("[GNSS] no fix %us after boot SATS:%u HDOP:%u NMEA:%u ERR:%u\n",
+          (unsigned int)(millis() / 1000), gd->sat, gd->hdop, gd->sentences, gd->errors);
+    }
     if (gd->date) {
       Serial.print("[GNSS] ");
       Serial.println(isoTime);
@@ -600,6 +606,11 @@ bool processGPS(CBuffer* buffer)
     return false;
   }
   if (kph >= 2) lastMotionTime = millis();
+  static bool firstFixLogged = false;
+  if (!firstFixLogged) {
+    firstFixLogged = true;
+    Serial.printf("[GNSS] first fix %us after boot SATS:%u HDOP:%u\n", (unsigned int)(millis() / 1000), gd->sat, gd->hdop);
+  }
 
   if (buffer) {
     buffer->add(PID_GPS_TIME, ELEMENT_UINT32, &gd->time, sizeof(uint32_t));
