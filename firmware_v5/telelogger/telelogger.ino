@@ -763,11 +763,16 @@ void printTime()
 *******************************************************************************/
 #if STORAGE != STORAGE_NONE
 // mount the storage and open this boot's files; safe to call again while the card is not mounted
-bool initStorage()
+// tries: mount attempts, the periodic retry passes 1 so a missing card does not stall sampling
+bool initStorage(int tries)
 {
   if (!state.check(STATE_STORAGE_READY)) {
     // init storage
+#if STORAGE == STORAGE_SD
+    if (logger.mount(tries)) {
+#else
     if (logger.init()) {
+#endif
       state.set(STATE_STORAGE_READY);
     }
   }
@@ -826,7 +831,7 @@ void initialize()
 #endif
 
 #if STORAGE != STORAGE_NONE
-  initStorage();
+  initStorage(SD_INIT_TRIES);
 #endif
 
   // re-try OBD if connection not established
@@ -963,7 +968,7 @@ void process()
   static uint32_t lastStorageTry = 0;
   if ((!state.check(STATE_STORAGE_READY) || !logger.active()) && millis() - lastStorageTry >= 1000UL * SD_RETRY_INTERVAL) {
     lastStorageTry = millis();
-    if (initStorage()) Serial.println("[SD] logging started late");
+    if (initStorage(1)) Serial.println("[SD] logging started late");
   }
 #endif
   static uint32_t lastGPStick = 0;

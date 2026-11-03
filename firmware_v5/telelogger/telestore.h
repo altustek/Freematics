@@ -82,6 +82,7 @@ protected:
 class SDLogger : public FileLogger {
 public:
     bool init();
+    bool mount(int tries);
     uint32_t begin();
     void flush();
 };
