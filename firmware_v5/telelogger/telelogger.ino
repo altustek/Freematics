@@ -998,14 +998,16 @@ static void gnssQuietUpdate(bool fix)
   uint32_t now = millis();
   if (fix) lastFix = now;
   bool fixFresh = lastFix && now - lastFix < 1000UL * GNSS_QUIET_LOST_AFTER;
-  // ignition on (ECU answering or alternator charging) or the vehicle moved in the last 30 s
-  bool driving = state.check(STATE_OBD_READY) || batteryVoltage >= CHARGING_VOLTAGE ||
-      (lastMotionTime && now - lastMotionTime < 30000);
+  // ignition on (ECU answering) or the vehicle moved in the last 30 s; the battery voltage is not used, it
+  // reads 15 to 17 V on USB power and drifts
+  bool ecu = state.check(STATE_OBD_READY);
+  bool moved = lastMotionTime && now - lastMotionTime < 30000;
+  bool driving = ecu || moved;
   if (!rfQuiet) {
     if (driving && !fixFresh && (!lastExit || now - lastExit >= 1000UL * GNSS_QUIET_COOLDOWN)) {
       quietStart = now;
       rfQuiet = true;
-      Serial.printf("[QUIET] enter, no fix, radios off (%us after boot)\n", (unsigned int)(now / 1000));
+      Serial.printf("[QUIET] enter, no fix, radios off (%us after boot, %s)\n", (unsigned int)(now / 1000), ecu ? "ECU" : "motion");
     }
     return;
   }
