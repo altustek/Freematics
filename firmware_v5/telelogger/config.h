@@ -323,6 +323,11 @@
 #ifndef GNSS_QUIET_LOST_AFTER
 #define GNSS_QUIET_LOST_AFTER 20
 #endif
+// vibration does not count as motion in the first GNSS_QUIET_SETTLE seconds after boot (start-up work on the
+// bench makes the accelerometer jump); the ECU answering still counts at once
+#ifndef GNSS_QUIET_SETTLE
+#define GNSS_QUIET_SETTLE 60
+#endif
 #ifndef GNSS_QUIET_MAX
 #define GNSS_QUIET_MAX 300
 #endif

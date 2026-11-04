@@ -1001,7 +1001,7 @@ static void gnssQuietUpdate(bool fix)
   // ignition on (ECU answering) or the vehicle moved in the last 30 s; the battery voltage is not used, it
   // reads 15 to 17 V on USB power and drifts
   bool ecu = state.check(STATE_OBD_READY);
-  bool moved = lastMotionTime && now - lastMotionTime < 30000;
+  bool moved = now >= 1000UL * GNSS_QUIET_SETTLE && lastMotionTime && now - lastMotionTime < 30000;
   bool driving = ecu || moved;
   if (!rfQuiet) {
     if (driving && !fixFresh && (!lastExit || now - lastExit >= 1000UL * GNSS_QUIET_COOLDOWN)) {
