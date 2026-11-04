@@ -87,6 +87,12 @@ uint8_t accCount = 0;
 // millis() of the last vibration seen by processMEMS(); the network task compares it with a copy to notice
 // that the vehicle started moving (written by the main task, 32-bit so a read is atomic)
 volatile uint32_t memsMotionTime = 0;
+#if GNSS_QUIET_ACQUIRE
+// set by process() while the modem and WiFi must stay off to let the GNSS receiver find a fix; the
+// telemetry task shuts the radios down and waits. WiFi joins are refused until wifiHoldUntil (millis()).
+volatile bool rfQuiet = false;
+volatile uint32_t wifiHoldUntil = 0;
+#endif
 int deviceTemp = 0; // degC, for the cooling-down check
 int deviceTempX10 = 0; // 0.1 degC, as PID_DEVICE_TEMP is sent with TEMP_TENTHS
 
@@ -111,6 +117,9 @@ const WifiNet wifiNets[] = WIFI_NETWORKS;
 // configured one (config.h / NVS); returns false if there is nothing to join
 bool selectWifi()
 {
+#if GNSS_QUIET_ACQUIRE
+  if (rfQuiet || (int32_t)(millis() - wifiHoldUntil) < 0) return false;
+#endif
 #ifdef WIFI_NETWORKS
   // scanning blocks for seconds and hops channels: keep the current choice
   // between scans
@@ -981,6 +990,34 @@ bool waitMotion(long timeout)
 /*******************************************************************************
   Collecting and processing data
 *******************************************************************************/
+#if GNSS_QUIET_ACQUIRE
+// decides when the radios go quiet and when they come back; fix = an accepted GNSS fix in this sample
+static void gnssQuietUpdate(bool fix)
+{
+  static uint32_t lastFix = 0, quietStart = 0, lastExit = 0;
+  uint32_t now = millis();
+  if (fix) lastFix = now;
+  bool fixFresh = lastFix && now - lastFix < 1000UL * GNSS_QUIET_LOST_AFTER;
+  // ignition on (ECU answering or alternator charging) or the vehicle moved in the last 30 s
+  bool driving = state.check(STATE_OBD_READY) || batteryVoltage >= CHARGING_VOLTAGE ||
+      (lastMotionTime && now - lastMotionTime < 30000);
+  if (!rfQuiet) {
+    if (driving && !fixFresh && (!lastExit || now - lastExit >= 1000UL * GNSS_QUIET_COOLDOWN)) {
+      quietStart = now;
+      rfQuiet = true;
+      Serial.printf("[QUIET] enter, no fix, radios off (%us after boot)\n", (unsigned int)(now / 1000));
+    }
+    return;
+  }
+  const char* why = fixFresh ? "fix" : !driving ? "stopped" : now - quietStart >= 1000UL * GNSS_QUIET_MAX ? "timeout" : 0;
+  if (!why) return;
+  lastExit = now;
+  wifiHoldUntil = now + 1000UL * GNSS_QUIET_WIFI_HOLD;
+  rfQuiet = false;
+  Serial.printf("[QUIET] exit after %us (%s), modem first\n", (unsigned int)((now - quietStart) / 1000), why);
+}
+#endif
+
 void process()
 {
 #if STORAGE != STORAGE_NONE
@@ -1101,6 +1138,10 @@ void process()
       lastGPStick = millis();
     }
   }
+#endif
+
+#if GNSS_QUIET_ACQUIRE
+  gnssQuietUpdate(success);
 #endif
 
   if (!state.check(STATE_MEMS_READY)) {
@@ -1300,7 +1341,11 @@ bool initCell(bool quick = false)
   // within this power-on; the automatic entry is the last resort and always goes on to setup()
   bool selected = false;
   if (carrierCount < 0) carrierInit();
-  for (int i = 0; i < carrierCount && !selected; i++) {
+  for (int i = 0; i < carrierCount && !selected
+#if GNSS_QUIET_ACQUIRE
+      && !rfQuiet
+#endif
+      ; i++) {
     carrierCur = carrierPick();
     Serial.print("[CELL] Carrier:");
     Serial.println(carrierPlmn[carrierCur][0] ? carrierPlmn[carrierCur] : "auto");
@@ -1380,6 +1425,30 @@ static void modemOffIfOn()
   Serial.println(teleClient.cell.powerOffIfOn(&sys) ? "[CELL] modem was on, now off" : "[CELL] modem already off");
 }
 
+#if GNSS_QUIET_ACQUIRE
+// end any session and switch the modem and WiFi off (called by the telemetry task); the sample buffers are
+// dropped, the SD card still has every record
+static void rfQuietDown()
+{
+  if (state.check(STATE_CELL_CONNECTED) || state.check(STATE_WIFI_CONNECTED)) {
+    teleClient.shutdown();
+    netop = "";
+    ip = "";
+    rssi = 0;
+  }
+  state.clear(STATE_NET_READY | STATE_CELL_CONNECTED | STATE_WIFI_CONNECTED);
+  modemOffIfOn();
+#if ENABLE_WIFI || ENABLE_HTTPD
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_OFF);
+  curSSID[0] = 0;
+#endif
+  teleClient.reset();
+  bufman.purge();
+  Serial.println("[QUIET] modem and WiFi off");
+}
+#endif
+
 void sendStandbyReport(CStorageRAM& store, bool useGPS)
 {
   CBuffer* buffer = bufman.getFree();
@@ -1458,6 +1527,9 @@ static void cellRetryWait()
   uint32_t start = millis();
   uint32_t seenMotion = memsMotionTime;
   while (state.check(STATE_WORKING)) {
+#if GNSS_QUIET_ACQUIRE
+    if (rfQuiet) break;
+#endif
     uint32_t waited = millis() - start;
     if (waited >= 1000UL * CELL_RETRY_WAIT) break;
     if (waited >= 1000UL * CELL_RETRY_MIN && memsMotionTime != seenMotion) {
@@ -1580,6 +1652,14 @@ void telemetry(void* inst)
 #endif
 
     while (state.check(STATE_WORKING)) {
+#if GNSS_QUIET_ACQUIRE
+      if (rfQuiet) {
+        rfQuietDown();
+        while (rfQuiet && state.check(STATE_WORKING)) delay(200);
+        connErrors = 0;
+        continue;
+      }
+#endif
 #if ENABLE_WIFI
       if (curSSID[0]) {
         if (!state.check(STATE_WIFI_CONNECTED) && teleClient.wifi.connected()) {
@@ -1610,6 +1690,9 @@ void telemetry(void* inst)
         bool cellUp = initCell();
         if (!cellUp || !teleClient.connect()) {
           if (cellUp) carrierResult(false, CELL_BAD_NODATA);
+#if GNSS_QUIET_ACQUIRE
+          wifiHoldUntil = 0; // the modem did not make it: WiFi may be tried now
+#endif
           teleClient.cell.end();
           state.clear(STATE_NET_READY | STATE_CELL_CONNECTED);
           Serial.println("[CELL] Deactivated");

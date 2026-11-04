@@ -311,6 +311,27 @@
 #ifndef CELL_COPS_TIMEOUT
 #define CELL_COPS_TIMEOUT 15000
 #endif
+// Quiet acquisition: while the vehicle is moving or its ignition is on and there is no GNSS fix, the modem
+// and WiFi are switched off (live data pauses, the SD card keeps logging) so radio noise cannot slow the
+// receiver. The modem comes back first when a fix arrives; WiFi stays blocked for GNSS_QUIET_WIFI_HOLD
+// seconds so the modem gets the chance to log in, and is released at once if the modem fails. Quiet
+// ends at GNSS_QUIET_MAX seconds even without a fix, and cannot start again for GNSS_QUIET_COOLDOWN seconds.
+// A fix older than GNSS_QUIET_LOST_AFTER seconds counts as lost.
+#ifndef GNSS_QUIET_ACQUIRE
+#define GNSS_QUIET_ACQUIRE 1
+#endif
+#ifndef GNSS_QUIET_LOST_AFTER
+#define GNSS_QUIET_LOST_AFTER 20
+#endif
+#ifndef GNSS_QUIET_MAX
+#define GNSS_QUIET_MAX 300
+#endif
+#ifndef GNSS_QUIET_COOLDOWN
+#define GNSS_QUIET_COOLDOWN 120
+#endif
+#ifndef GNSS_QUIET_WIFI_HOLD
+#define GNSS_QUIET_WIFI_HOLD 90
+#endif
 // Hologram SIMs fail on Verizon (registers, gets an IP, but DNS and UDP never work). When the automatic
 // selection ends up on an operator whose name contains this text the attempt is treated as failed and
 // the next carrier in the rotation is tried. Empty string = accept any operator.
